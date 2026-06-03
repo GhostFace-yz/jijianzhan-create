@@ -8,6 +8,9 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
+  // Global API prefix
+  app.setGlobalPrefix('api');
+
   // Global CORS
   app.enableCors({
     origin: true,

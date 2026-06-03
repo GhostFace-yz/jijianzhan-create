@@ -218,7 +218,7 @@ describe('SessionsController (e2e)', () => {
         .delete('/sessions/session-1')
         .expect(200)
         .expect((res) => {
-          expect(res.body.data.deletedAt).toBeDefined();
+          expect(res.body.data.deleted_at).toBeDefined();
         });
     });
   });
@@ -234,7 +234,7 @@ describe('SessionsController (e2e)', () => {
         .post('/sessions/session-1/restore')
         .expect(201)
         .expect((res) => {
-          expect(res.body.data.deletedAt).toBeNull();
+          expect(res.body.data.deleted_at).toBeNull();
         });
     });
   });
