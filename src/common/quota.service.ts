@@ -1,6 +1,6 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
-import { SubscriptionStatus, GenerationType } from '@prisma/client';
+import { SubscriptionStatus, GenerationType, PlanTier } from '@prisma/client';
 
 export interface QuotaCheckResult {
   subscription: {
@@ -22,7 +22,7 @@ export class QuotaService {
   constructor(private readonly prisma: PrismaService) {}
 
   async checkUserQuota(userId: string): Promise<QuotaCheckResult> {
-    const subscription = await this.prisma.subscription.findFirst({
+    let subscription = await this.prisma.subscription.findFirst({
       where: {
         userId,
         status: SubscriptionStatus.ACTIVE,
@@ -31,11 +31,49 @@ export class QuotaService {
       include: { plan: true },
     });
 
+    // Auto-create FREE subscription for users without one (covers existing
+    // users registered before the fix as well as edge-case registrations).
     if (!subscription) {
-      throw new HttpException(
-        'No active subscription found',
-        HttpStatus.PAYMENT_REQUIRED,
+      const freePlan = await this.prisma.subscriptionPlan.findFirst({
+        where: { tier: PlanTier.FREE },
+      });
+
+      if (!freePlan) {
+        throw new HttpException(
+          'No active subscription found',
+          HttpStatus.PAYMENT_REQUIRED,
+        );
+      }
+
+      const quotaLimits =
+        (freePlan.quotaLimits as Record<string, number>) ?? {};
+      const usageQuota =
+        Object.values(quotaLimits).find(
+          (v) => typeof v === 'number' && v > 0,
+        ) ?? 0;
+      const now = new Date();
+      const periodEnd = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999,
       );
+
+      subscription = await this.prisma.subscription.create({
+        data: {
+          userId,
+          planId: freePlan.id,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          usageQuota,
+          usageConsumed: 0,
+          status: SubscriptionStatus.ACTIVE,
+        },
+        include: { plan: true },
+      });
     }
 
     if (

@@ -62,6 +62,18 @@ export class GenerationTasksController {
     return this.generationTaskService.getTask(id, user.id);
   }
 
+  @Get('generation-tasks/:id/poll')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '轮询视频生成任务状态（Agnes AI）' })
+  @ApiParam({ name: 'id', description: '任务 ID' })
+  async poll(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<GenerationTaskResponseDto> {
+    return this.generationTaskService.pollVideoTask(id, user.id);
+  }
+
   @Post('generation-tasks/:id/retry')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

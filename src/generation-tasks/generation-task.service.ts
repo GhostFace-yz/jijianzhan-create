@@ -83,31 +83,63 @@ export class GenerationTaskService {
           ? input.params.prompt
           : message.content;
 
-      const referenceImages =
-        Array.isArray(input.params?.referenceImages)
-          ? (input.params.referenceImages as string[])
-          : undefined;
+      if (input.type === GenerationType.IMAGE) {
+        // Image generation is synchronous
+        const referenceImages =
+          Array.isArray(input.params?.referenceImages)
+            ? (input.params.referenceImages as string[])
+            : undefined;
 
-      const agnesResult = await this.agnesProvider.submitTask({
-        type: input.type,
-        prompt,
-        referenceImages,
-        ...input.params,
-      });
+        const imageResult = await this.agnesProvider.submitImageTask({
+          prompt,
+          size: typeof input.params?.size === 'string' ? input.params.size : undefined,
+          referenceImages,
+        });
 
-      // 5. Update task with provider task ID and transition to PROCESSING
-      const updatedTask = await this.transitionStatus(
-        task.id,
-        GenerationStatus.PROCESSING,
-        {
-          providerTaskId: agnesResult.providerTaskId,
-        },
-      );
+        // 5. Mark as completed immediately with the result URL
+        const completedTask = await this.transitionStatus(
+          task.id,
+          GenerationStatus.COMPLETED,
+          {
+            resultUrl: imageResult.url,
+            progress: 100,
+          },
+        );
 
-      // 6. Increment usage
-      await this.quotaService.incrementUsage(quotaResult.subscription.id);
+        // 6. Increment usage
+        await this.quotaService.incrementUsage(quotaResult.subscription.id);
 
-      return updatedTask;
+        return completedTask;
+      } else {
+        // Video generation is asynchronous
+        const videoParams: Parameters<AgnesProvider['submitVideoTask']>[0] = {
+          prompt,
+        };
+
+        // Map frontend params to Agnes video params
+        if (input.params?.height !== undefined) videoParams.height = input.params.height as number;
+        if (input.params?.width !== undefined) videoParams.width = input.params.width as number;
+        if (input.params?.numFrames !== undefined) videoParams.numFrames = input.params.numFrames as number;
+        if (input.params?.frameRate !== undefined) videoParams.frameRate = input.params.frameRate as number;
+        if (input.params?.negativePrompt !== undefined) videoParams.negativePrompt = input.params.negativePrompt as string;
+        if (input.params?.image !== undefined) videoParams.image = input.params.image as string;
+
+        const videoResult = await this.agnesProvider.submitVideoTask(videoParams);
+
+        // 5. Update task with provider task ID and transition to PROCESSING
+        const updatedTask = await this.transitionStatus(
+          task.id,
+          GenerationStatus.PROCESSING,
+          {
+            providerTaskId: videoResult.taskId,
+          },
+        );
+
+        // 6. Increment usage
+        await this.quotaService.incrementUsage(quotaResult.subscription.id);
+
+        return updatedTask;
+      }
     } catch (err: any) {
       // Mark task as failed if Agnes submission fails
       this.logger.error(
@@ -135,24 +167,43 @@ export class GenerationTaskService {
     }
 
     const params = (task.params as Record<string, unknown>) ?? {};
-    const prompt =
-      typeof params.prompt === 'string' ? params.prompt : '';
-
-    const referenceImages = Array.isArray(params.referenceImages)
-      ? (params.referenceImages as string[])
-      : undefined;
+    const prompt = typeof params.prompt === 'string' ? params.prompt : '';
 
     try {
-      const agnesResult = await this.agnesProvider.submitTask({
-        type: task.type,
-        prompt,
-        referenceImages,
-        ...params,
-      });
+      if (task.type === GenerationType.IMAGE) {
+        const referenceImages = Array.isArray(params.referenceImages)
+          ? (params.referenceImages as string[])
+          : undefined;
 
-      return this.transitionStatus(task.id, GenerationStatus.PROCESSING, {
-        providerTaskId: agnesResult.providerTaskId,
-      });
+        const imageResult = await this.agnesProvider.submitImageTask({
+          prompt,
+          size: typeof params.size === 'string' ? params.size : undefined,
+          referenceImages,
+        });
+
+        return this.transitionStatus(
+          task.id,
+          GenerationStatus.COMPLETED,
+          {
+            resultUrl: imageResult.url,
+            progress: 100,
+          },
+        );
+      } else {
+        const videoParams: Parameters<AgnesProvider['submitVideoTask']>[0] = { prompt };
+        if (params.height !== undefined) videoParams.height = params.height as number;
+        if (params.width !== undefined) videoParams.width = params.width as number;
+        if (params.numFrames !== undefined) videoParams.numFrames = params.numFrames as number;
+        if (params.frameRate !== undefined) videoParams.frameRate = params.frameRate as number;
+        if (params.negativePrompt !== undefined) videoParams.negativePrompt = params.negativePrompt as string;
+        if (params.image !== undefined) videoParams.image = params.image as string;
+
+        const videoResult = await this.agnesProvider.submitVideoTask(videoParams);
+
+        return this.transitionStatus(task.id, GenerationStatus.PROCESSING, {
+          providerTaskId: videoResult.taskId,
+        });
+      }
     } catch (err: any) {
       this.logger.error(
         `Failed to resubmit task to Agnes: ${err.message}`,
@@ -163,6 +214,62 @@ export class GenerationTaskService {
       });
       throw err;
     }
+  }
+
+  async pollVideoTask(taskId: string, userId: string) {
+    const task = await this.prisma.generationTask.findFirst({
+      where: { id: taskId, userId },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Generation task not found');
+    }
+
+    if (task.type !== GenerationType.VIDEO) {
+      throw new BadRequestException('Polling is only supported for video tasks');
+    }
+
+    if (!task.providerTaskId) {
+      throw new BadRequestException('Video task has not been submitted to Agnes yet');
+    }
+
+    const queryResult = await this.agnesProvider.queryVideoTask(task.providerTaskId);
+
+    // Map Agnes status to internal status
+    const agnesStatus = queryResult.status.toUpperCase();
+    let newStatus: GenerationStatus | undefined;
+    let resultUrl: string | undefined;
+    let errorMessage: string | undefined;
+    let progress: number | undefined;
+
+    if (agnesStatus === 'COMPLETED' || agnesStatus === 'SUCCESS' || agnesStatus === 'DONE') {
+      newStatus = GenerationStatus.COMPLETED;
+      resultUrl = queryResult.videoUrl;
+      progress = 100;
+    } else if (agnesStatus === 'FAILED' || agnesStatus === 'ERROR') {
+      newStatus = GenerationStatus.FAILED;
+      errorMessage = queryResult.errorMessage ?? 'Video generation failed';
+    } else {
+      // PROCESSING, PENDING, etc.
+      newStatus = GenerationStatus.PROCESSING;
+      progress = queryResult.progress ?? task.progress ?? 0;
+    }
+
+    // Only update if status changed or progress updated
+    if (
+      newStatus !== task.status ||
+      progress !== undefined ||
+      resultUrl !== undefined ||
+      errorMessage !== undefined
+    ) {
+      return this.transitionStatus(task.id, newStatus, {
+        resultUrl,
+        errorMessage,
+        progress,
+      });
+    }
+
+    return task;
   }
 
   async createTask(input: CreateTaskInput) {
