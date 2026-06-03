@@ -6,6 +6,9 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { SessionsModule } from './sessions/sessions.module';
 import { MessagesModule } from './messages/messages.module';
+import { GenerationTasksModule } from './generation-tasks/generation-tasks.module';
+import { UsersModule } from './users/users.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -17,6 +20,9 @@ import { MessagesModule } from './messages/messages.module';
     AuthModule,
     SessionsModule,
     MessagesModule,
+    GenerationTasksModule,
+    UsersModule,
+    SubscriptionsModule,
   ],
   controllers: [],
   providers: [

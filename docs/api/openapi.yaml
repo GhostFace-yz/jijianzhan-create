@@ -474,6 +474,65 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   # ─── Generation Tasks ───────────────────────────────────
+  /generation-tasks:
+    post:
+      tags: [Generation Tasks]
+      summary: 提交图片/视频生成任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message_id, type]
+              properties:
+                message_id:
+                  type: string
+                  description: 关联的消息 ID
+                type:
+                  type: string
+                  enum: [IMAGE, VIDEO]
+                  description: 生成类型
+                params:
+                  type: object
+                  description: 生成参数
+                  properties:
+                    prompt:
+                      type: string
+                    aspect_ratio:
+                      type: string
+                      enum: [1:1, 16:9, 9:16, 4:3, 3:4]
+                    width:
+                      type: integer
+                    height:
+                      type: integer
+                    frame_rate:
+                      type: integer
+                      minimum: 1
+                      maximum: 60
+                    frame_count:
+                      type: integer
+                      minimum: 1
+                      maximum: 441
+                    reference_images:
+                      type: array
+                      items:
+                        type: string
+                        format: uri
+      responses:
+        '201':
+          description: 任务已创建并提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTask'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /generation-tasks/{id}:
     get:
       tags: [Generation Tasks]
