@@ -1,12 +1,18 @@
+import { useCallback } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuth() {
-  const { token, isAuthenticated, setToken, logout } = useAuthStore()
+  const { isAuthenticated, user, accessToken, clearAuth } = useAuthStore()
+
+  const logout = useCallback(() => {
+    clearAuth()
+    window.location.href = '/login'
+  }, [clearAuth])
 
   return {
-    token,
     isAuthenticated,
-    setToken,
+    user,
+    accessToken,
     logout,
   }
 }
