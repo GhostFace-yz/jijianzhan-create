@@ -1,5 +1,13 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../common/prisma.service';
+import { QuotaService } from '../common/quota.service';
+import { AgnesProvider } from './agnes.provider';
 import { GenerationStatus, GenerationType, Prisma } from '@prisma/client';
 
 export interface CreateTaskInput {
@@ -17,6 +25,8 @@ export interface TaskStateTransition {
 
 @Injectable()
 export class GenerationTaskService {
+  private readonly logger = new Logger(GenerationTaskService.name);
+
   // Valid state transitions for generation tasks
   private readonly validTransitions: Map<string, GenerationStatus[]> = new Map([
     [GenerationStatus.PENDING, [GenerationStatus.PROCESSING, GenerationStatus.FAILED]],
@@ -25,7 +35,135 @@ export class GenerationTaskService {
     [GenerationStatus.FAILED, [GenerationStatus.PENDING]], // retry allowed
   ]);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly quotaService: QuotaService,
+    private readonly agnesProvider: AgnesProvider,
+  ) {}
+
+  async submitTask(input: CreateTaskInput) {
+    // 1. Verify message ownership
+    const message = await this.prisma.message.findFirst({
+      where: {
+        id: input.messageId,
+        session: {
+          userId: input.userId,
+        },
+      },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Message not found or does not belong to user');
+    }
+
+    // 2. Check quota
+    const quotaResult = await this.quotaService.checkGenerationQuota(
+      input.userId,
+      input.type,
+    );
+
+    // 3. Create local task
+    const task = await this.prisma.generationTask.create({
+      data: {
+        messageId: input.messageId,
+        userId: input.userId,
+        type: input.type,
+        status: GenerationStatus.PENDING,
+        params: input.params
+          ? (input.params as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+        progress: 0,
+      },
+    });
+
+    // 4. Submit to Agnes AI
+    try {
+      const prompt =
+        typeof input.params?.prompt === 'string'
+          ? input.params.prompt
+          : message.content;
+
+      const referenceImages =
+        Array.isArray(input.params?.referenceImages)
+          ? (input.params.referenceImages as string[])
+          : undefined;
+
+      const agnesResult = await this.agnesProvider.submitTask({
+        type: input.type,
+        prompt,
+        referenceImages,
+        ...input.params,
+      });
+
+      // 5. Update task with provider task ID and transition to PROCESSING
+      const updatedTask = await this.transitionStatus(
+        task.id,
+        GenerationStatus.PROCESSING,
+        {
+          providerTaskId: agnesResult.providerTaskId,
+        },
+      );
+
+      // 6. Increment usage
+      await this.quotaService.incrementUsage(quotaResult.subscription.id);
+
+      return updatedTask;
+    } catch (err: any) {
+      // Mark task as failed if Agnes submission fails
+      this.logger.error(
+        `Failed to submit task to Agnes: ${err.message}`,
+        err.stack,
+      );
+      await this.transitionStatus(task.id, GenerationStatus.FAILED, {
+        errorMessage: err.message ?? 'Failed to submit to generation provider',
+      });
+      throw err;
+    }
+  }
+
+  async resubmitToAgnes(taskId: string, userId: string) {
+    const task = await this.prisma.generationTask.findFirst({
+      where: { id: taskId, userId },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Generation task not found');
+    }
+
+    if (task.status !== GenerationStatus.PENDING) {
+      throw new BadRequestException('Task must be in PENDING status to resubmit');
+    }
+
+    const params = (task.params as Record<string, unknown>) ?? {};
+    const prompt =
+      typeof params.prompt === 'string' ? params.prompt : '';
+
+    const referenceImages = Array.isArray(params.referenceImages)
+      ? (params.referenceImages as string[])
+      : undefined;
+
+    try {
+      const agnesResult = await this.agnesProvider.submitTask({
+        type: task.type,
+        prompt,
+        referenceImages,
+        ...params,
+      });
+
+      return this.transitionStatus(task.id, GenerationStatus.PROCESSING, {
+        providerTaskId: agnesResult.providerTaskId,
+      });
+    } catch (err: any) {
+      this.logger.error(
+        `Failed to resubmit task to Agnes: ${err.message}`,
+        err.stack,
+      );
+      await this.transitionStatus(task.id, GenerationStatus.FAILED, {
+        errorMessage: err.message ?? 'Failed to resubmit to generation provider',
+      });
+      throw err;
+    }
+  }
 
   async createTask(input: CreateTaskInput) {
     return this.prisma.generationTask.create({

@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GenerationTaskService } from '../../src/generation-tasks/generation-task.service';
 import { PrismaService } from '../../src/common/prisma.service';
+import { QuotaService } from '../../src/common/quota.service';
+import { AgnesProvider } from '../../src/generation-tasks/agnes.provider';
 import { GenerationStatus, GenerationType } from '@prisma/client';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 
@@ -17,6 +19,25 @@ describe('GenerationTaskService', () => {
       update: jest.fn(),
       deleteMany: jest.fn(),
     },
+    message: {
+      findFirst: jest.fn(),
+    },
+    subscription: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+      update: jest.fn(),
+    },
+  };
+
+  const mockQuotaService = {
+    checkUserQuota: jest.fn(),
+    checkGenerationQuota: jest.fn(),
+    incrementUsage: jest.fn(),
+  };
+
+  const mockAgnesProvider = {
+    submitTask: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -24,6 +45,8 @@ describe('GenerationTaskService', () => {
       providers: [
         GenerationTaskService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: QuotaService, useValue: mockQuotaService },
+        { provide: AgnesProvider, useValue: mockAgnesProvider },
       ],
     }).compile();
 
