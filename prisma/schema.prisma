@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  phone         String?   @unique
+  passwordHash  String    @map("password_hash")
+  name          String?
+  avatarUrl     String?   @map("avatar_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  sessions      Session[]
+  refreshTokens RefreshToken[]
+  generationTasks GenerationTask[]
+  subscriptions Subscription[]
+  bills         Bill[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+model RefreshToken {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  tokenJti          String   @unique @map("token_jti")
+  deviceFingerprint String?  @map("device_fingerprint")
+  ipAddress         String?  @map("ip_address")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  title     String    @default("新对话")
+  status    SessionStatus @default(ACTIVE)
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([deletedAt])
+  @@map("sessions")
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  sessionId      String   @map("session_id")
+  role           MessageRole
+  content        String   @db.Text
+  type           MessageType @default(TEXT)
+  attachments    Json?    @default("[]")
+  generatedMedia Json?    @map("generated_media") @default("[]")
+  metadata       Json?    @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  session         Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  generationTasks GenerationTask[]
+
+  @@index([sessionId, createdAt(sort: Asc)])
+  @@map("messages")
+}
+
+model GenerationTask {
+  id              String           @id @default(cuid())
+  messageId       String           @map("message_id")
+  userId          String           @map("user_id")
+  type            GenerationType
+  providerTaskId  String?          @map("provider_task_id")
+  status          GenerationStatus @default(PENDING)
+  resultUrl       String?          @map("result_url")
+  params          Json?
+  errorMessage    String?          @map("error_message")
+  progress        Int?             @default(0)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([messageId])
+  @@index([providerTaskId])
+  @@map("generation_tasks")
+}
+
+model SubscriptionPlan {
+  id            String   @id @default(cuid())
+  name          String
+  tier          PlanTier
+  priceMonthly  Int      @map("price_monthly")
+  priceYearly   Int      @map("price_yearly")
+  features      Json
+  quotaLimits   Json     @map("quota_limits")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                   String            @id @default(cuid())
+  userId               String            @map("user_id")
+  planId               String            @map("plan_id")
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart   DateTime          @map("current_period_start")
+  currentPeriodEnd     DateTime          @map("current_period_end")
+  usageQuota           Int               @map("usage_quota")
+  usageConsumed        Int               @default(0) @map("usage_consumed")
+  cancelAtPeriodEnd    Boolean           @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan    SubscriptionPlan @relation(fields: [planId], references: [id])
+  bills   Bill[]
+
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+model Bill {
+  id             String     @id @default(cuid())
+  userId         String     @map("user_id")
+  subscriptionId String     @map("subscription_id")
+  amount         Int
+  currency       String     @default("CNY")
+  status         BillStatus @default(PENDING)
+  paidAt         DateTime?  @map("paid_at")
+  periodStart    DateTime   @map("period_start")
+  periodEnd      DateTime   @map("period_end")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("bills")
+}
+
+enum SessionStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  IMAGE_GEN
+  VIDEO_GEN
+}
+
+enum GenerationType {
+  IMAGE
+  VIDEO
+}
+
+enum GenerationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PlanTier {
+  FREE
+  BASIC
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum BillStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}

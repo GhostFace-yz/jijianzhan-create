@@ -1,0 +1,1278 @@
+openapi: 3.0.3
+info:
+  title: AI Chat Web API
+  description: |
+    极简栈创造 — AI 聊天网页端 MVP 后端 API。
+    支持文本对话（SSE 流式）、图片生成（同步）、视频生成（异步任务队列）、
+    会话管理、用户鉴权、订阅计费与额度管理。
+  version: 1.0.0
+  contact:
+    name: Core · 后端工程师
+servers:
+  - url: https://openclaw.jijianfw.cn/api
+    description: Production
+  - url: http://localhost:3000/api
+    description: Local Development
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Auth
+    description: 注册、登录、Token 刷新与注销
+  - name: Users
+    description: 用户信息管理
+  - name: Sessions
+    description: 对话会话 CRUD
+  - name: Messages
+    description: 消息发送与流式接收
+  - name: Generation Tasks
+    description: 异步图片/视频生成任务查询与重试
+  - name: Uploads
+    description: 预签名 URL 上传
+  - name: Subscriptions
+    description: 订阅计划、购买、降级与账单
+  - name: Quota
+    description: 额度查询与用量统计
+
+paths:
+  # ─── Auth ───────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: 用户注册
+      description: 支持邮箱+密码或手机号+验证码注册
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/EmailRegisterRequest'
+                - $ref: '#/components/schemas/PhoneRegisterRequest'
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 用户登录
+      description: 支持邮箱+密码或手机号+验证码登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/EmailLoginRequest'
+                - $ref: '#/components/schemas/PhoneLoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新 Access Token
+      description: 使用 Refresh Token 换取新的 Access Token 和 Refresh Token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+                  description: Refresh Token
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: 注销登录
+      description: 使当前 Refresh Token 失效（加入 Redis 黑名单）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '204':
+          description: 注销成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: 找回密码
+      description: 发送密码重置验证码至邮箱或手机
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, method]
+              properties:
+                identifier:
+                  type: string
+                  description: 邮箱或手机号
+                method:
+                  type: string
+                  enum: [email, phone]
+      responses:
+        '204':
+          description: 验证码已发送
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: 重置密码
+      description: 使用验证码重置密码
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, code, new_password]
+              properties:
+                identifier:
+                  type: string
+                code:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        '204':
+          description: 密码重置成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ─── Users ──────────────────────────────────────────────
+  /users/me:
+    get:
+      tags: [Users]
+      summary: 获取当前用户信息
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      tags: [Users]
+      summary: 更新当前用户信息
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 50
+                avatar_url:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ─── Sessions ───────────────────────────────────────────
+  /sessions:
+    get:
+      tags: [Sessions]
+      summary: 获取会话列表
+      description: 按最后活跃时间倒序，默认返回最近 50 条
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: 按标题模糊搜索
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Session'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+    post:
+      tags: [Sessions]
+      summary: 创建新会话
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 50
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+
+  /sessions/{id}:
+    get:
+      tags: [Sessions]
+      summary: 获取会话详情（含消息）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: 消息分页游标（message_id）
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session, messages, pagination]
+                properties:
+                  session:
+                    $ref: '#/components/schemas/Session'
+                  messages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Message'
+                  pagination:
+                    $ref: '#/components/schemas/CursorPagination'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Sessions]
+      summary: 更新会话（标题）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 50
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Sessions]
+      summary: 删除会话（软删除）
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─── Messages ───────────────────────────────────────────
+  /sessions/{sessionId}/messages:
+    post:
+      tags: [Messages]
+      summary: 发送消息
+      description: |
+        发送消息后：
+        - `type: TEXT` → 客户端需连接 SSE 接收流式回复
+        - `type: IMAGE_GEN` → 同步等待生成结果，返回图片 URL
+        - `type: VIDEO_GEN` → 异步提交，返回 task_id，客户端轮询任务状态
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, type]
+              properties:
+                content:
+                  type: string
+                  maxLength: 4000
+                  description: 消息内容 / 生成 Prompt
+                type:
+                  type: string
+                  enum: [TEXT, IMAGE_GEN, VIDEO_GEN]
+                attachments:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: 参考图 URL 列表（用于图生图、图生视频）
+                params:
+                  type: object
+                  description: 生成参数
+                  properties:
+                    aspect_ratio:
+                      type: string
+                      enum: [1:1, 16:9, 9:16, 4:3, 3:4]
+                    width:
+                      type: integer
+                    height:
+                      type: integer
+                    frame_rate:
+                      type: integer
+                      minimum: 1
+                      maximum: 60
+                      default: 24
+                    frame_count:
+                      type: integer
+                      minimum: 1
+                      maximum: 441
+                      default: 121
+      responses:
+        '201':
+          description: 消息已创建
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TextMessageResponse'
+                  - $ref: '#/components/schemas/ImageGenResponse'
+                  - $ref: '#/components/schemas/VideoGenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /sessions/{sessionId}/stream:
+    get:
+      tags: [Messages]
+      summary: SSE 流式接收 AI 文本回复
+      description: |
+        建立 SSE 连接，接收当前会话的 AI 流式回复。
+        支持 `Last-Event-ID` 头用于断线重连。
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE 流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ─── Generation Tasks ───────────────────────────────────
+  /generation-tasks/{id}:
+    get:
+      tags: [Generation Tasks]
+      summary: 查询生成任务状态
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTask'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /generation-tasks/{id}/retry:
+    post:
+      tags: [Generation Tasks]
+      summary: 重试失败的任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 已提交重试
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTask'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─── Uploads ────────────────────────────────────────────
+  /uploads/presigned-url:
+    post:
+      tags: [Uploads]
+      summary: 获取预签名上传 URL
+      description: 服务端生成预签名 URL，前端直传对象存储
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, content_type, size]
+              properties:
+                filename:
+                  type: string
+                  maxLength: 255
+                content_type:
+                  type: string
+                  enum: [image/jpeg, image/png, image/gif, image/webp, video/mp4, video/quicktime]
+                size:
+                  type: integer
+                  description: 文件大小（字节）
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upload_url, object_key, access_url, expires_at]
+                properties:
+                  upload_url:
+                    type: string
+                    format: uri
+                  object_key:
+                    type: string
+                  access_url:
+                    type: string
+                    format: uri
+                  expires_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  # ─── Subscriptions ──────────────────────────────────────
+  /subscription-plans:
+    get:
+      tags: [Subscriptions]
+      summary: 获取订阅计划列表
+      security: []
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SubscriptionPlan'
+
+  /subscriptions/current:
+    get:
+      tags: [Subscriptions]
+      summary: 获取当前订阅状态
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+  /subscriptions:
+    post:
+      tags: [Subscriptions]
+      summary: 创建/升级订阅
+      description: 返回支付网关跳转 URL 或支付参数
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id, period]
+              properties:
+                plan_id:
+                  type: string
+                period:
+                  type: string
+                  enum: [monthly, yearly]
+      responses:
+        '201':
+          description: 创建成功，返回支付信息
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [subscription, payment]
+                properties:
+                  subscription:
+                    $ref: '#/components/schemas/Subscription'
+                  payment:
+                    type: object
+                    properties:
+                      gateway_url:
+                        type: string
+                        format: uri
+                      params:
+                        type: object
+                        additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /subscriptions/downgrade:
+    post:
+      tags: [Subscriptions]
+      summary: 降级订阅
+      description: 在当前计费周期结束后降级至指定计划
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id]
+              properties:
+                plan_id:
+                  type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /subscriptions/cancel:
+    post:
+      tags: [Subscriptions]
+      summary: 取消订阅
+      description: 在当前计费周期结束后取消
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+
+  /subscriptions/bills:
+    get:
+      tags: [Subscriptions]
+      summary: 获取账单历史
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pagination]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Bill'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  # ─── Quota ──────────────────────────────────────────────
+  /quota:
+    get:
+      tags: [Quota]
+      summary: 获取当前额度与用量
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [quota, usage]
+                properties:
+                  quota:
+                    type: object
+                    required: [text_chats, image_gens, video_gens]
+                    properties:
+                      text_chats:
+                        type: integer
+                        description: -1 表示无限制
+                      image_gens:
+                        type: integer
+                      video_gens:
+                        type: integer
+                  usage:
+                    type: object
+                    required: [text_chats, image_gens, video_gens]
+                    properties:
+                      text_chats:
+                        type: integer
+                      image_gens:
+                        type: integer
+                      video_gens:
+                        type: integer
+                  reset_at:
+                    type: string
+                    format: date-time
+                    description: 额度重置时间
+
+  # ─── Webhooks (Internal) ────────────────────────────────
+  /internal/webhooks/generation-callback:
+    post:
+      tags: [Generation Tasks]
+      summary: 生成服务回调（内部）
+      description: |
+        agnes-ai 等第三方生成服务完成后的回调端点。
+        受 `X-Webhook-Secret` 头保护。
+      security: []
+      parameters:
+        - name: X-Webhook-Secret
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_task_id, status]
+              properties:
+                provider_task_id:
+                  type: string
+                status:
+                  type: string
+                  enum: [COMPLETED, FAILED]
+                result_url:
+                  type: string
+                  format: uri
+                error_message:
+                  type: string
+      responses:
+        '204':
+          description: 已处理
+        '401':
+          description: Webhook Secret 无效
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access Token（有效期 2 小时）
+
+  schemas:
+    # ─── Auth ─────────────────────────────────────────────
+    EmailRegisterRequest:
+      type: object
+      required: [method, email, password]
+      properties:
+        method:
+          type: string
+          enum: [email]
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          description: 须含大小写字母+数字
+
+    PhoneRegisterRequest:
+      type: object
+      required: [method, phone, code]
+      properties:
+        method:
+          type: string
+          enum: [phone]
+        phone:
+          type: string
+          pattern: '^1[3-9]\d{9}$'
+        code:
+          type: string
+          pattern: '^\d{6}$'
+
+    EmailLoginRequest:
+      type: object
+      required: [method, email, password]
+      properties:
+        method:
+          type: string
+          enum: [email]
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    PhoneLoginRequest:
+      type: object
+      required: [method, phone, code]
+      properties:
+        method:
+          type: string
+          enum: [phone]
+        phone:
+          type: string
+        code:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [access_token, refresh_token, expires_in, token_type, user]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          description: Access Token 有效期（秒），默认 7200
+        token_type:
+          type: string
+          enum: [Bearer]
+          default: Bearer
+        user:
+          $ref: '#/components/schemas/User'
+
+    # ─── User ─────────────────────────────────────────────
+    User:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        name:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ─── Session ──────────────────────────────────────────
+    Session:
+      type: object
+      required: [id, user_id, title, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ─── Message ──────────────────────────────────────────
+    Message:
+      type: object
+      required: [id, session_id, role, content, type, created_at]
+      properties:
+        id:
+          type: string
+        session_id:
+          type: string
+        role:
+          type: string
+          enum: [USER, ASSISTANT, SYSTEM]
+        content:
+          type: string
+        type:
+          type: string
+          enum: [TEXT, IMAGE_GEN, VIDEO_GEN]
+        attachments:
+          type: array
+          items:
+            type: string
+            format: uri
+        generated_media:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [image, video]
+              url:
+                type: string
+                format: uri
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    TextMessageResponse:
+      type: object
+      required: [message, stream_url]
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+        stream_url:
+          type: string
+          description: SSE 连接地址
+
+    ImageGenResponse:
+      type: object
+      required: [message, generated_media]
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+        generated_media:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [image]
+              url:
+                type: string
+                format: uri
+
+    VideoGenResponse:
+      type: object
+      required: [message, task]
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+        task:
+          $ref: '#/components/schemas/GenerationTask'
+
+    # ─── Generation Task ──────────────────────────────────
+    GenerationTask:
+      type: object
+      required: [id, message_id, user_id, type, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        message_id:
+          type: string
+        user_id:
+          type: string
+        type:
+          type: string
+          enum: [IMAGE, VIDEO]
+        provider_task_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED]
+        result_url:
+          type: string
+          format: uri
+          nullable: true
+        params:
+          type: object
+          additionalProperties: true
+        error_message:
+          type: string
+          nullable: true
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ─── Subscription ─────────────────────────────────────
+    SubscriptionPlan:
+      type: object
+      required: [id, name, tier, price_monthly, price_yearly, features, quota_limits]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        tier:
+          type: string
+          enum: [FREE, BASIC, PRO]
+        price_monthly:
+          type: integer
+          description: 价格（分）
+        price_yearly:
+          type: integer
+          description: 价格（分）
+        features:
+          type: object
+          additionalProperties: true
+        quota_limits:
+          type: object
+          properties:
+            text_chats:
+              type: integer
+            image_gens:
+              type: integer
+            video_gens:
+              type: integer
+
+    Subscription:
+      type: object
+      required: [id, user_id, plan_id, status, current_period_start, current_period_end, usage_quota, usage_consumed]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        plan_id:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, CANCELLED, EXPIRED]
+        current_period_start:
+          type: string
+          format: date-time
+        current_period_end:
+          type: string
+          format: date-time
+        usage_quota:
+          type: integer
+        usage_consumed:
+          type: integer
+        cancel_at_period_end:
+          type: boolean
+        plan:
+          $ref: '#/components/schemas/SubscriptionPlan'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Bill:
+      type: object
+      required: [id, user_id, subscription_id, amount, currency, status, period_start, period_end, created_at]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        subscription_id:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+          default: CNY
+        status:
+          type: string
+          enum: [PENDING, PAID, FAILED, REFUNDED]
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    # ─── Pagination ───────────────────────────────────────
+    Pagination:
+      type: object
+      required: [page, limit, total, total_pages]
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    CursorPagination:
+      type: object
+      required: [limit, has_more]
+      properties:
+        limit:
+          type: integer
+        next_cursor:
+          type: string
+          nullable: true
+        has_more:
+          type: boolean
+
+    # ─── Error ────────────────────────────────────────────
+    Error:
+      type: object
+      required: [code, message, timestamp, path]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+        path:
+          type: string
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: BAD_REQUEST
+            message: 请求参数验证失败
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/sessions
+
+    Unauthorized:
+      description: 未授权或 Token 无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: UNAUTHORIZED
+            message: Access Token 已过期或无效
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/sessions
+
+    Forbidden:
+      description: 权限不足
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: FORBIDDEN
+            message: 无权访问该资源
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/sessions/123
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: NOT_FOUND
+            message: 会话不存在
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/sessions/123
+
+    Conflict:
+      description: 资源冲突
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: CONFLICT
+            message: 该邮箱已被注册
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/auth/register
+
+    PaymentRequired:
+      description: 额度不足或订阅过期
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: PAYMENT_REQUIRED
+            message: 本月图片生成额度已耗尽，请升级订阅计划
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/sessions/123/messages
+
+    TooManyRequests:
+      description: 请求过于频繁
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: TOO_MANY_REQUESTS
+            message: 请求过于频繁，请稍后再试
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/sessions/123/messages
+
+    InternalError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: INTERNAL_ERROR
+            message: 服务器内部错误
+            timestamp: '2026-06-02T10:00:00Z'
+            path: /api/sessions/123/messages

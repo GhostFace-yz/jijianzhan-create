@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 / 注册 — 极简栈 AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans SC', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            background: '#0F0F10',
+            foreground: '#F2F2F5',
+            card: '#18181B',
+            primary: '#6366F1',
+            'primary-foreground': '#FFFFFF',
+            secondary: '#27272A',
+            'secondary-foreground': '#E4E4E7',
+            muted: '#27272A',
+            'muted-foreground': '#A1A1AA',
+            accent: '#3F3F46',
+            border: '#27272A',
+            ring: '#6366F1',
+            destructive: '#EF4444',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+      background: linear-gradient(135deg, #312E81 0%, #1E1B4B 40%, #0F0F10 100%);
+      min-height: 100vh;
+    }
+    .glass-card {
+      background: rgba(24, 24, 27, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(63, 63, 70, 0.5);
+    }
+    .input-field {
+      background: transparent;
+      border: 1px solid #27272A;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #6366F1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+    .tab-active {
+      border-bottom: 2px solid #6366F1;
+      color: #F2F2F5;
+    }
+    .tab-inactive {
+      border-bottom: 2px solid transparent;
+      color: #A1A1AA;
+    }
+    .tab-inactive:hover {
+      color: #E4E4E7;
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <!-- Logo & Brand -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 mb-4">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-semibold tracking-tight text-foreground">极简栈 AI</h1>
+      <p class="text-sm text-muted-foreground mt-1">智能对话，从这里开始</p>
+    </div>
+
+    <!-- Auth Card -->
+    <div class="glass-card rounded-2xl p-6 sm:p-8">
+      <!-- Tabs -->
+      <div class="flex gap-6 mb-6 border-b border-border">
+        <button class="tab-active pb-3 text-sm font-medium transition-colors" onclick="switchTab('login')">登录</button>
+        <button class="tab-inactive pb-3 text-sm font-medium transition-colors" onclick="switchTab('register')">注册</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">邮箱 / 手机号</label>
+          <input type="text" placeholder="请输入邮箱或手机号" class="input-field w-full rounded-md px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground">
+        </div>
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">密码</label>
+          <input type="password" placeholder="请输入密码" class="input-field w-full rounded-md px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground">
+        </div>
+        <div class="flex items-center justify-between">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="w-4 h-4 rounded border-border bg-card text-primary focus:ring-primary">
+            <span class="text-sm text-muted-foreground">记住我</span>
+          </label>
+          <a href="#" class="text-sm text-primary hover:text-primary/80 transition-colors">忘记密码？</a>
+        </div>
+        <button type="submit" class="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2.5 rounded-md transition-all duration-150 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] active:scale-[0.98]">
+          登录
+        </button>
+      </form>
+
+      <!-- Register Form (hidden by default) -->
+      <form id="registerForm" class="space-y-4 hidden">
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">邮箱</label>
+          <input type="email" placeholder="请输入邮箱" class="input-field w-full rounded-md px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground">
+        </div>
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">手机号</label>
+          <div class="flex gap-2">
+            <select class="input-field rounded-md px-2 py-2.5 text-sm text-foreground bg-card w-20">
+              <option>+86</option>
+              <option>+852</option>
+              <option>+1</option>
+            </select>
+            <input type="tel" placeholder="请输入手机号" class="input-field flex-1 rounded-md px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground">
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">验证码</label>
+          <div class="flex gap-2">
+            <input type="text" placeholder="请输入验证码" class="input-field flex-1 rounded-md px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground">
+            <button type="button" class="px-4 py-2.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:bg-accent transition-colors whitespace-nowrap">
+              获取验证码
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">密码</label>
+          <input type="password" placeholder="至少 8 位，含大小写字母和数字" class="input-field w-full rounded-md px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground">
+        </div>
+        <div class="flex items-start gap-2">
+          <input type="checkbox" class="w-4 h-4 rounded border-border bg-card text-primary focus:ring-primary mt-0.5">
+          <span class="text-sm text-muted-foreground">我已阅读并同意 <a href="#" class="text-primary hover:underline">用户协议</a> 和 <a href="#" class="text-primary hover:underline">隐私政策</a></span>
+        </div>
+        <button type="submit" class="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2.5 rounded-md transition-all duration-150 hover:shadow-[0_0_20px_rgba(99,102,241,0.15)] active:scale-[0.98]">
+          注册
+        </button>
+      </form>
+    </div>
+
+    <!-- Footer -->
+    <p class="text-center text-xs text-muted-foreground mt-6">
+      登录即表示您同意我们的服务条款和隐私政策
+    </p>
+  </div>
+
+  <script>
+    function switchTab(tab) {
+      const loginForm = document.getElementById('loginForm');
+      const registerForm = document.getElementById('registerForm');
+      const tabs = document.querySelectorAll('.tab-active, .tab-inactive');
+
+      if (tab === 'login') {
+        loginForm.classList.remove('hidden');
+        registerForm.classList.add('hidden');
+        tabs[0].classList.add('tab-active');
+        tabs[0].classList.remove('tab-inactive');
+        tabs[1].classList.add('tab-inactive');
+        tabs[1].classList.remove('tab-active');
+      } else {
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+        tabs[0].classList.add('tab-inactive');
+        tabs[0].classList.remove('tab-active');
+        tabs[1].classList.add('tab-active');
+        tabs[1].classList.remove('tab-inactive');
+      }
+    }
+  </script>
+</body>
+</html>

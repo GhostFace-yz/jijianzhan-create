@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>设置 — 极简栈 AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans SC', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            background: '#0F0F10',
+            foreground: '#F2F2F5',
+            card: '#18181B',
+            primary: '#6366F1',
+            'primary-foreground': '#FFFFFF',
+            secondary: '#27272A',
+            'secondary-foreground': '#E4E4E7',
+            muted: '#27272A',
+            'muted-foreground': '#A1A1AA',
+            accent: '#3F3F46',
+            border: '#27272A',
+            ring: '#6366F1',
+            destructive: '#EF4444',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif; }
+    .input-field {
+      background: transparent;
+      border: 1px solid #27272A;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: #6366F1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+    .toggle-checkbox:checked {
+      background-color: #6366F1;
+      border-color: #6366F1;
+    }
+  </style>
+</head>
+<body class="bg-background text-foreground min-h-screen">
+  <!-- Header -->
+  <header class="h-14 flex items-center px-4 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-20">
+    <a href="#" class="p-2 -ml-2 rounded-md hover:bg-accent transition-colors mr-2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+    </a>
+    <h1 class="text-base font-semibold">设置</h1>
+  </header>
+
+  <div class="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
+    <!-- Account Section -->
+    <section class="bg-card rounded-xl border border-border p-5">
+      <h2 class="text-sm font-semibold text-foreground mb-4">账号信息</h2>
+      <div class="flex items-center gap-4 mb-5">
+        <div class="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-xl font-semibold text-primary">
+          U
+        </div>
+        <div class="flex-1">
+          <h3 class="font-medium">用户昵称</h3>
+          <p class="text-sm text-muted-foreground">user@example.com</p>
+          <p class="text-xs text-muted-foreground mt-0.5">ID: 12345678</p>
+        </div>
+        <button class="px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:bg-accent transition-colors">
+          编辑资料
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">显示名称</label>
+          <input type="text" value="用户昵称" class="input-field w-full rounded-md px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground">
+        </div>
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">邮箱</label>
+          <input type="email" value="user@example.com" disabled class="input-field w-full rounded-md px-3 py-2.5 text-sm text-muted-foreground bg-muted/50 cursor-not-allowed">
+        </div>
+        <div>
+          <label class="block text-sm text-foreground mb-1.5">手机号</label>
+          <div class="flex gap-2">
+            <input type="tel" value="138****8888" disabled class="input-field flex-1 rounded-md px-3 py-2.5 text-sm text-muted-foreground bg-muted/50 cursor-not-allowed">
+            <button class="px-3 py-2.5 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:bg-accent transition-colors whitespace-nowrap">
+              更换绑定
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Subscription Section -->
+    <section class="bg-card rounded-xl border border-border p-5">
+      <h2 class="text-sm font-semibold text-foreground mb-4">订阅管理</h2>
+      <div class="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/20 mb-4">
+        <div>
+          <p class="text-sm font-medium text-foreground">当前计划：免费版</p>
+          <p class="text-xs text-muted-foreground mt-0.5">每日限额 50 条消息，单文件最大 10MB</p>
+        </div>
+        <button class="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all">
+          升级套餐
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between py-2">
+          <span class="text-sm text-muted-foreground">本月已使用消息数</span>
+          <div class="flex items-center gap-2">
+            <div class="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div class="h-full bg-primary rounded-full" style="width: 45%"></div>
+            </div>
+            <span class="text-sm text-foreground">23 / 50</span>
+          </div>
+        </div>
+        <div class="flex items-center justify-between py-2">
+          <span class="text-sm text-muted-foreground">存储空间使用</span>
+          <div class="flex items-center gap-2">
+            <div class="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div class="h-full bg-primary rounded-full" style="width: 12%"></div>
+            </div>
+            <span class="text-sm text-foreground">120MB / 1GB</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Generation Parameters -->
+    <section class="bg-card rounded-xl border border-border p-5">
+      <h2 class="text-sm font-semibold text-foreground mb-4">生成参数</h2>
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-foreground">流式输出</p>
+            <p class="text-xs text-muted-foreground">实时显示 AI 生成内容</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked class="sr-only peer">
+            <div class="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+          </label>
+        </div>
+
+        <div class="border-t border-border pt-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-foreground">自动保存对话历史</p>
+              <p class="text-xs text-muted-foreground">所有对话自动同步至云端</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked class="sr-only peer">
+              <div class="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="border-t border-border pt-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-foreground">Markdown 渲染</p>
+              <p class="text-xs text-muted-foreground">AI 回复内容以富文本形式展示</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked class="sr-only peer">
+              <div class="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="border-t border-border pt-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-foreground">代码语法高亮</p>
+              <p class="text-xs text-muted-foreground">代码块自动高亮显示</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked class="sr-only peer">
+              <div class="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Appearance Section -->
+    <section class="bg-card rounded-xl border border-border p-5">
+      <h2 class="text-sm font-semibold text-foreground mb-4">外观</h2>
+      <div class="space-y-4">
+        <div>
+          <p class="text-sm text-foreground mb-2">主题模式</p>
+          <div class="grid grid-cols-3 gap-2">
+            <button class="flex flex-col items-center gap-2 p-3 rounded-lg border border-primary bg-primary/5 transition-colors">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+              <span class="text-xs">深色</span>
+            </button>
+            <button class="flex flex-col items-center gap-2 p-3 rounded-lg border border-border hover:bg-accent transition-colors text-muted-foreground">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+              <span class="text-xs">浅色</span>
+            </button>
+            <button class="flex flex-col items-center gap-2 p-3 rounded-lg border border-border hover:bg-accent transition-colors text-muted-foreground">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8M12 17v4"/></svg>
+              <span class="text-xs">跟随系统</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="border-t border-border pt-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-foreground">字体大小</p>
+            </div>
+            <select class="input-field rounded-md px-3 py-2 text-sm text-foreground bg-card">
+              <option>小</option>
+              <option selected>标准</option>
+              <option>大</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Danger Zone -->
+    <section class="bg-card rounded-xl border border-destructive/20 p-5">
+      <h2 class="text-sm font-semibold text-destructive mb-4">危险操作</h2>
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-foreground">清除所有对话历史</p>
+            <p class="text-xs text-muted-foreground">此操作不可恢复</p>
+          </div>
+          <button class="px-3 py-1.5 rounded-md border border-destructive/30 text-destructive text-sm font-medium hover:bg-destructive/10 transition-colors">
+            清除
+          </button>
+        </div>
+        <div class="border-t border-border pt-3 flex items-center justify-between">
+          <div>
+            <p class="text-sm text-foreground">注销账号</p>
+            <p class="text-xs text-muted-foreground">永久删除账号及所有数据</p>
+          </div>
+          <button class="px-3 py-1.5 rounded-md border border-destructive/30 text-destructive text-sm font-medium hover:bg-destructive/10 transition-colors">
+            注销
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section class="text-center py-4">
+      <p class="text-xs text-muted-foreground">极简栈 AI v1.0.0</p>
+      <p class="text-xs text-muted-foreground mt-1">
+        <a href="#" class="hover:text-foreground transition-colors">用户协议</a>
+        <span class="mx-2">·</span>
+        <a href="#" class="hover:text-foreground transition-colors">隐私政策</a>
+        <span class="mx-2">·</span>
+        <a href="#" class="hover:text-foreground transition-colors">帮助中心</a>
+      </p>
+    </section>
+  </div>
+</body>
+</html>

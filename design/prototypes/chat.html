@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>对话 — 极简栈 AI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'Noto Sans SC', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          },
+          colors: {
+            background: '#0F0F10',
+            foreground: '#F2F2F5',
+            card: '#18181B',
+            primary: '#6366F1',
+            'primary-foreground': '#FFFFFF',
+            secondary: '#27272A',
+            'secondary-foreground': '#E4E4E7',
+            muted: '#27272A',
+            'muted-foreground': '#A1A1AA',
+            accent: '#3F3F46',
+            border: '#27272A',
+            ring: '#6366F1',
+            destructive: '#EF4444',
+            'ai-message-bg': '#1C1C1F',
+            'user-message-bg': '#312E81',
+            'code-bg': '#18181B',
+            'code-border': '#27272A',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif; }
+    .sidebar-scrollbar::-webkit-scrollbar { width: 4px; }
+    .sidebar-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-scrollbar::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 2px; }
+    .chat-scrollbar::-webkit-scrollbar { width: 6px; }
+    .chat-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .chat-scrollbar::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 3px; }
+    .code-block {
+      background: #18181B;
+      border: 1px solid #27272A;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .code-header {
+      background: #1C1C1F;
+      border-bottom: 1px solid #27272A;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .streaming-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.2em;
+      background: #6366F1;
+      vertical-align: text-bottom;
+      margin-left: 2px;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .streaming-cursor {
+      animation: blink 0.8s steps(1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-background text-foreground h-screen overflow-hidden">
+  <div class="flex h-full">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-[280px] bg-background border-r border-border transform -translate-x-full lg:translate-x-0 lg:static transition-transform duration-300 flex flex-col">
+      <!-- Sidebar Header -->
+      <div class="h-14 flex items-center px-4 border-b border-border">
+        <button class="lg:hidden p-2 -ml-2 rounded-md hover:bg-accent transition-colors" onclick="toggleSidebar()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+        <div class="flex items-center gap-2 ml-1">
+          <div class="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <span class="font-semibold text-sm tracking-tight">极简栈 AI</span>
+        </div>
+      </div>
+
+      <!-- New Chat Button -->
+      <div class="p-3">
+        <button class="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border hover:bg-accent transition-colors text-sm font-medium">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>
+          新建对话
+        </button>
+      </div>
+
+      <!-- Session List -->
+      <div class="flex-1 overflow-y-auto sidebar-scrollbar px-3 pb-3 space-y-1">
+        <div class="text-xs text-muted-foreground font-medium px-2 py-2">今天</div>
+        <button class="w-full text-left px-3 py-2.5 rounded-lg bg-sidebar-active border-l-[3px] border-primary transition-colors group">
+          <div class="text-sm font-medium truncate">Python 异步编程最佳实践</div>
+          <div class="text-xs text-muted-foreground mt-0.5">14:32</div>
+        </button>
+        <button class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-accent transition-colors group">
+          <div class="text-sm font-medium truncate">解释 React Server Components</div>
+          <div class="text-xs text-muted-foreground mt-0.5">11:15</div>
+        </button>
+        <button class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-accent transition-colors group">
+          <div class="text-sm font-medium truncate">图片内容分析：风景照片</div>
+          <div class="text-xs text-muted-foreground mt-0.5">09:48</div>
+        </button>
+
+        <div class="text-xs text-muted-foreground font-medium px-2 py-2 mt-2">昨天</div>
+        <button class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-accent transition-colors group">
+          <div class="text-sm font-medium truncate">NestJS 项目架构设计建议</div>
+          <div class="text-xs text-muted-foreground mt-0.5">昨天 18:20</div>
+        </button>
+        <button class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-accent transition-colors group">
+          <div class="text-sm font-medium truncate">Docker Compose 配置优化</div>
+          <div class="text-xs text-muted-foreground mt-0.5">昨天 16:05</div>
+        </button>
+
+        <div class="text-xs text-muted-foreground font-medium px-2 py-2 mt-2">更早</div>
+        <button class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-accent transition-colors group">
+          <div class="text-sm font-medium truncate">视频内容理解：产品演示</div>
+          <div class="text-xs text-muted-foreground mt-0.5">5月30日</div>
+        </button>
+        <button class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-accent transition-colors group">
+          <div class="text-sm font-medium truncate">TypeScript 类型体操练习</div>
+          <div class="text-xs text-muted-foreground mt-0.5">5月29日</div>
+        </button>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="p-3 border-t border-border">
+        <button class="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-sm">
+          <div class="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">U</div>
+          <span class="flex-1 text-left truncate">用户昵称</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Overlay for mobile -->
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 z-30 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+    <!-- Main Chat Area -->
+    <main class="flex-1 flex flex-col min-w-0">
+      <!-- Header -->
+      <header class="h-14 flex items-center px-4 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-20">
+        <button class="lg:hidden p-2 -ml-2 rounded-md hover:bg-accent transition-colors mr-2" onclick="toggleSidebar()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </button>
+        <div class="flex-1 min-w-0">
+          <h2 class="text-sm font-medium truncate">Python 异步编程最佳实践</h2>
+          <p class="text-xs text-muted-foreground">kimi · 12 条消息</p>
+        </div>
+        <div class="flex items-center gap-1">
+          <button class="p-2 rounded-md hover:bg-accent transition-colors" title="分享">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>
+          </button>
+          <button class="p-2 rounded-md hover:bg-accent transition-colors" title="更多">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Messages -->
+      <div class="flex-1 overflow-y-auto chat-scrollbar p-4 space-y-6">
+        <!-- AI Welcome -->
+        <div class="flex gap-3">
+          <div class="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="bg-ai-message-bg rounded-lg px-4 py-3 max-w-[95%] lg:max-w-[85%]">
+              <p class="text-sm leading-relaxed">你好！我是极简栈 AI 助手。我可以帮你解答问题、分析图片和视频、编写代码，或者只是聊聊天。今天有什么可以帮你的吗？</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Message -->
+        <div class="flex gap-3 justify-end">
+          <div class="flex-1 min-w-0 flex justify-end">
+            <div class="bg-user-message-bg rounded-lg px-4 py-3 max-w-[90%] lg:max-w-[70%]">
+              <p class="text-sm leading-relaxed">请解释一下 Python 中 async/await 的最佳实践，并给一个实际的生产环境示例。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Message with Code -->
+        <div class="flex gap-3">
+          <div class="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="flex-1 min-w-0 space-y-3">
+            <div class="bg-ai-message-bg rounded-lg px-4 py-3 max-w-[95%] lg:max-w-[85%]">
+              <p class="text-sm leading-relaxed mb-3">Python 的 <code class="bg-code-bg text-primary px-1.5 py-0.5 rounded text-xs font-mono">async/await</code> 是现代高性能应用的核心。以下是生产环境中的最佳实践：</p>
+
+              <div class="code-block mb-3">
+                <div class="code-header">
+                  <span class="text-xs text-muted-foreground font-mono">python</span>
+                  <button class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    复制
+                  </button>
+                </div>
+                <pre class="p-3 overflow-x-auto text-xs font-mono leading-relaxed text-foreground"><code>import asyncio
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+class ConnectionPool:
+    """生产级异步连接池示例"""
+
+    def __init__(self, max_size: int = 10):
+        self._pool = asyncio.Queue(maxsize=max_size)
+        self._semaphore = asyncio.Semaphore(max_size)
+
+    async def acquire(self) -> "Connection":
+        async with self._semaphore:
+            return await self._pool.get()
+
+    async def release(self, conn: "Connection"):
+        await self._pool.put(conn)
+
+@asynccontextmanager
+async def get_db_conn() -> AsyncGenerator["Connection", None]:
+    """使用异步上下文管理器确保资源释放"""
+    conn = await pool.acquire()
+    try:
+        yield conn
+    finally:
+        await pool.release(conn)</code></pre>
+              </div>
+
+              <p class="text-sm leading-relaxed">关键要点：</p>
+              <ul class="text-sm leading-relaxed list-disc list-inside space-y-1 mt-1">
+                <li>始终使用 <code class="bg-code-bg text-primary px-1 py-0.5 rounded text-xs font-mono">asynccontextmanager</code> 管理资源生命周期</li>
+                <li>使用信号量（Semaphore）控制并发，避免资源耗尽</li>
+                <li>异常处理放在 <code class="bg-code-bg text-primary px-1 py-0.5 rounded text-xs font-mono">finally</code> 块中确保释放</li>
+              </ul>
+            </div>
+
+            <!-- Message Actions -->
+            <div class="flex items-center gap-1 max-w-[95%] lg:max-w-[85%]">
+              <button class="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title="重新生成">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+              </button>
+              <button class="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title="复制">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              </button>
+              <button class="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title="点赞">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>
+              </button>
+              <button class="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground" title="点踩">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9a2 2 0 002 2.3zM17 2h3a2 2 0 012 2v7a2 2 0 01-2 2h-3"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Message with Image -->
+        <div class="flex gap-3 justify-end">
+          <div class="flex-1 min-w-0 flex justify-end">
+            <div class="bg-user-message-bg rounded-lg px-4 py-3 max-w-[90%] lg:max-w-[70%] space-y-2">
+              <p class="text-sm leading-relaxed">帮我分析这张图片的内容</p>
+              <div class="relative rounded-xl overflow-hidden max-w-[280px]">
+                <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop" alt="用户上传的图片" class="w-full h-auto object-cover">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Streaming Message -->
+        <div class="flex gap-3">
+          <div class="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="bg-ai-message-bg rounded-lg px-4 py-3 max-w-[95%] lg:max-w-[85%]">
+              <p class="text-sm leading-relaxed">这张图片展示了一片壮丽的山景。画面中可以看到连绵起伏的山脉，山顶覆盖着积雪，山脚下是茂密的森林。天空呈现出柔和的渐变色，从地平线的淡金色过渡到上方的淡蓝色，应该是日出或日落时分拍摄的。<span class="streaming-cursor"></span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="border-t border-border bg-card/50 backdrop-blur-sm p-3">
+        <div class="max-w-3xl mx-auto">
+          <!-- Upload Progress (demo) -->
+          <div class="mb-2 hidden" id="uploadProgress">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+              <span>正在上传 image.jpg...</span>
+              <span class="ml-auto">68%</span>
+            </div>
+            <div class="mt-1 h-[3px] bg-muted rounded-full overflow-hidden">
+              <div class="h-full bg-primary rounded-full" style="width: 68%"></div>
+            </div>
+          </div>
+
+          <div class="flex items-end gap-2 bg-background border border-border rounded-xl px-3 py-2">
+            <button class="p-2 rounded-lg hover:bg-accent transition-colors flex-shrink-0 text-muted-foreground hover:text-foreground" title="上传图片或视频">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+            </button>
+            <textarea rows="1" placeholder="输入消息，Shift+Enter 换行..." class="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground resize-none outline-none py-2 max-h-[200px] min-h-[24px]" style="field-sizing: content;" oninput="this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 200) + 'px'"></textarea>
+            <button class="p-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed" title="发送">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
+          <p class="text-center text-[11px] text-muted-foreground mt-1.5">AI 生成的内容可能存在不准确之处，请核实重要信息。</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      const isOpen = !sidebar.classList.contains('-translate-x-full');
+
+      if (isOpen) {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+      } else {
+        sidebar.classList.remove('-translate-x-full');
+        overlay.classList.remove('hidden');
+      }
+    }
+  </script>
+</body>
+</html>
