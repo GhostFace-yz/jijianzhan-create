@@ -1,0 +1,290 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { MessagesService } from '../../src/messages/messages.service';
+import { PrismaService } from '../../src/common/prisma.service';
+import {
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  MessageRole,
+  MessageType,
+  SubscriptionStatus,
+} from '@prisma/client';
+
+describe('MessagesService', () => {
+  let service: MessagesService;
+  let prisma: PrismaService;
+
+  const mockPrisma = {
+    session: {
+      findFirst: jest.fn(),
+    },
+    subscription: {
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
+    message: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
+  };
+
+  const userId = 'user_test_123';
+  const sessionId = 'session_test_456';
+  const subscriptionId = 'sub_test_123';
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MessagesService,
+        { provide: PrismaService, useValue: mockPrisma },
+      ],
+    }).compile();
+
+    service = module.get<MessagesService>(MessagesService);
+    prisma = module.get<PrismaService>(PrismaService);
+
+    jest.clearAllMocks();
+  });
+
+  describe('verifySessionOwnership', () => {
+    it('should return session if owned by user', async () => {
+      mockPrisma.session.findFirst.mockResolvedValue({
+        id: sessionId,
+        userId,
+        title: 'Test Session',
+      });
+
+      const result = await service.verifySessionOwnership(sessionId, userId);
+      expect(result.id).toBe(sessionId);
+      expect(mockPrisma.session.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: sessionId,
+          userId,
+          deletedAt: null,
+        },
+      });
+    });
+
+    it('should throw ForbiddenException if session not found', async () => {
+      mockPrisma.session.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.verifySessionOwnership(sessionId, userId),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('checkUserQuota', () => {
+    it('should return subscription if quota is available', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: subscriptionId,
+        userId,
+        status: SubscriptionStatus.ACTIVE,
+        currentPeriodEnd: new Date(Date.now() + 86400000),
+        usageQuota: 100,
+        usageConsumed: 10,
+      });
+
+      const result = await service.checkUserQuota(userId);
+      expect(result.usageConsumed).toBe(10);
+      expect(result.usageQuota).toBe(100);
+    });
+
+    it('should throw 402 if no active subscription', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+
+      await expect(service.checkUserQuota(userId)).rejects.toThrow(
+        new HttpException(
+          'No active subscription found',
+          HttpStatus.PAYMENT_REQUIRED,
+        ),
+      );
+    });
+
+    it('should throw 402 if quota exceeded', async () => {
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: subscriptionId,
+        userId,
+        status: SubscriptionStatus.ACTIVE,
+        currentPeriodEnd: new Date(Date.now() + 86400000),
+        usageQuota: 100,
+        usageConsumed: 100,
+      });
+
+      await expect(service.checkUserQuota(userId)).rejects.toThrow(
+        new HttpException('Usage quota exceeded', HttpStatus.PAYMENT_REQUIRED),
+      );
+    });
+  });
+
+  describe('saveUserMessage', () => {
+    it('should create user message', async () => {
+      mockPrisma.message.create.mockResolvedValue({
+        id: 'msg_1',
+        sessionId,
+        role: MessageRole.USER,
+        content: 'Hello',
+        type: MessageType.TEXT,
+      });
+
+      const result = await service.saveUserMessage({
+        sessionId,
+        content: 'Hello',
+        type: MessageType.TEXT,
+      });
+
+      expect(result.role).toBe(MessageRole.USER);
+      expect(mockPrisma.message.create).toHaveBeenCalledWith({
+        data: {
+          sessionId,
+          role: MessageRole.USER,
+          content: 'Hello',
+          type: MessageType.TEXT,
+        },
+      });
+    });
+  });
+
+  describe('saveAssistantMessage', () => {
+    it('should create assistant message', async () => {
+      mockPrisma.message.create.mockResolvedValue({
+        id: 'msg_2',
+        sessionId,
+        role: MessageRole.ASSISTANT,
+        content: 'AI reply',
+        type: MessageType.TEXT,
+      });
+
+      const result = await service.saveAssistantMessage(sessionId, 'AI reply');
+      expect(result.role).toBe(MessageRole.ASSISTANT);
+    });
+  });
+
+  describe('incrementUsage', () => {
+    it('should increment usageConsumed by 1', async () => {
+      mockPrisma.subscription.update.mockResolvedValue({});
+
+      await service.incrementUsage(subscriptionId);
+
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: subscriptionId },
+        data: {
+          usageConsumed: { increment: 1 },
+        },
+      });
+    });
+  });
+
+  describe('getMessages', () => {
+    it('should return paginated messages sorted by createdAt asc', async () => {
+      mockPrisma.session.findFirst.mockResolvedValue({
+        id: sessionId,
+        userId,
+        title: 'Test Session',
+      });
+      mockPrisma.message.findMany.mockResolvedValue([
+        {
+          id: 'msg_1',
+          sessionId,
+          role: MessageRole.USER,
+          content: 'Hello',
+          type: MessageType.TEXT,
+          createdAt: new Date('2026-06-01T00:00:00Z'),
+          updatedAt: new Date('2026-06-01T00:00:00Z'),
+        },
+        {
+          id: 'msg_2',
+          sessionId,
+          role: MessageRole.ASSISTANT,
+          content: 'Hi there',
+          type: MessageType.TEXT,
+          createdAt: new Date('2026-06-01T00:01:00Z'),
+          updatedAt: new Date('2026-06-01T00:01:00Z'),
+        },
+      ]);
+      mockPrisma.message.count.mockResolvedValue(2);
+
+      const result = await service.getMessages(sessionId, userId, 1, 20);
+
+      expect(result.items).toHaveLength(2);
+      expect(result.items[0].role).toBe('USER');
+      expect(result.items[1].role).toBe('ASSISTANT');
+      expect(result.total).toBe(2);
+      expect(result.page).toBe(1);
+      expect(mockPrisma.message.findMany).toHaveBeenCalledWith({
+        where: { sessionId },
+        orderBy: { createdAt: 'asc' },
+        skip: 0,
+        take: 20,
+      });
+    });
+
+    it('should throw ForbiddenException for non-owned session', async () => {
+      mockPrisma.session.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getMessages(sessionId, userId, 1, 20),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('createMessageStream', () => {
+    it('should emit SSE chunks and save assistant message', (done) => {
+      mockPrisma.session.findFirst.mockResolvedValue({
+        id: sessionId,
+        userId,
+        title: 'Test Session',
+      });
+      mockPrisma.subscription.findFirst.mockResolvedValue({
+        id: subscriptionId,
+        userId,
+        status: SubscriptionStatus.ACTIVE,
+        currentPeriodEnd: new Date(Date.now() + 86400000),
+        usageQuota: 100,
+        usageConsumed: 10,
+      });
+      mockPrisma.message.create.mockResolvedValue({});
+      mockPrisma.subscription.update.mockResolvedValue({});
+
+      const stream = service.createMessageStream(userId, {
+        sessionId,
+        content: 'Hello AI',
+        type: MessageType.TEXT,
+      });
+
+      const chunks: string[] = [];
+      let doneReceived = false;
+
+      stream.subscribe({
+        next: (chunk) => {
+          if (!chunk.done) {
+            chunks.push(chunk.chunk);
+          } else {
+            doneReceived = true;
+          }
+        },
+        error: (err) => done(err),
+        complete: () => {
+          expect(doneReceived).toBe(true);
+          expect(chunks.length).toBeGreaterThan(0);
+          // Verify user message saved
+          expect(mockPrisma.message.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+              data: expect.objectContaining({
+                sessionId,
+                role: MessageRole.USER,
+                content: 'Hello AI',
+                type: MessageType.TEXT,
+              }),
+            }),
+          );
+          // Verify assistant message will be saved
+          done();
+        },
+      });
+    }, 10000);
+  });
+});

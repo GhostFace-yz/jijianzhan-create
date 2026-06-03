@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './common/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { SessionsModule } from './sessions/sessions.module';
+import { MessagesModule } from './messages/messages.module';
 
 @Module({
   imports: [
@@ -11,12 +13,8 @@ import { AuthModule } from './auth/auth.module';
     }),
     PrismaModule,
     AuthModule,
-    // TODO: register additional modules here
-    // GenerationTasksModule,
-    // MessagesModule,
-    // SessionsModule,
-    // SubscriptionsModule,
-    // UploadsModule,
+    SessionsModule,
+    MessagesModule,
   ],
   controllers: [],
   providers: [],
