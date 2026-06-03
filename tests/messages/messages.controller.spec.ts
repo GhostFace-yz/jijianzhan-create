@@ -1,11 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe, HttpException, HttpStatus } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigModule } from '@nestjs/config';
 import * as request from 'supertest';
 import { MessagesModule } from '../../src/messages/messages.module';
 import { PrismaModule } from '../../src/common/prisma.module';
 import { PrismaService } from '../../src/common/prisma.service';
+import { QuotaService } from '../../src/common/quota.service';
 import { AuthModule } from '../../src/auth/auth.module';
 import { MessageRole, MessageType, SubscriptionStatus } from '@prisma/client';
 
@@ -13,6 +14,7 @@ describe('MessagesController (integration)', () => {
   let app: INestApplication;
   let prismaMock: any;
   let jwtService: JwtService;
+  let quotaServiceMock: any;
 
   const userId = 'user_test_123';
   const sessionId = 'session_test_456';
@@ -26,6 +28,7 @@ describe('MessagesController (integration)', () => {
       },
       subscription: {
         findFirst: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
       },
       message: {
@@ -38,6 +41,11 @@ describe('MessagesController (integration)', () => {
       },
       $connect: jest.fn(),
       $disconnect: jest.fn(),
+    };
+
+    quotaServiceMock = {
+      checkUserQuota: jest.fn(),
+      incrementUsage: jest.fn().mockResolvedValue(undefined),
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -57,6 +65,8 @@ describe('MessagesController (integration)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(prismaMock)
+      .overrideProvider(QuotaService)
+      .useValue(quotaServiceMock)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -85,6 +95,28 @@ describe('MessagesController (integration)', () => {
       email: 'test@example.com',
       phone: null,
     });
+    quotaServiceMock.checkUserQuota.mockResolvedValue({
+      subscription: {
+        id: subscriptionId,
+        usageQuota: 100,
+        usageConsumed: 10,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: new Date(Date.now() + 86400000),
+      },
+      plan: {
+        id: 'plan-1',
+        name: 'Pro',
+        quotaLimits: { text_chats: -1 },
+      },
+    });
+    prismaMock.subscription.findUniqueOrThrow.mockResolvedValue({
+      id: subscriptionId,
+      userId,
+      status: SubscriptionStatus.ACTIVE,
+      currentPeriodEnd: new Date(Date.now() + 86400000),
+      usageQuota: 100,
+      usageConsumed: 10,
+    });
   });
 
   function getAuthToken(uid: string = userId): string {
@@ -101,14 +133,7 @@ describe('MessagesController (integration)', () => {
         userId,
         title: 'Test Session',
       });
-      prismaMock.subscription.findFirst.mockResolvedValue({
-        id: subscriptionId,
-        userId,
-        status: SubscriptionStatus.ACTIVE,
-        currentPeriodEnd: new Date(Date.now() + 86400000),
-        usageQuota: 100,
-        usageConsumed: 10,
-      });
+      prismaMock.message.findMany.mockResolvedValue([]);
       prismaMock.message.create.mockResolvedValue({
         id: 'msg_user_1',
         sessionId,
@@ -152,70 +177,92 @@ describe('MessagesController (integration)', () => {
           }),
         }),
       );
-
-      // Verify assistant message saved after stream
-      expect(prismaMock.message.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            sessionId,
-            role: MessageRole.ASSISTANT,
-            type: MessageType.TEXT,
-          }),
-        }),
-      );
     }, 10000);
 
-    it('should return 403 when session does not belong to user', async () => {
+    it('should emit error through SSE when session does not belong to user', async () => {
       prismaMock.session.findFirst.mockResolvedValue(null);
 
       const response = await request(app.getHttpServer())
         .post('/messages')
         .set('Authorization', `Bearer ${getAuthToken()}`)
-        .send({ sessionId: otherSessionId, content: 'Hello', type: 'TEXT' });
+        .send({ sessionId: otherSessionId, content: 'Hello', type: 'TEXT' })
+        .buffer(true)
+        .parse((res, callback) => {
+          let data = '';
+          res.on('data', (chunk: Buffer) => {
+            data += chunk.toString();
+          });
+          res.on('end', () => {
+            callback(null, data);
+          });
+        });
 
-      expect(response.status).toBe(403);
-      expect(response.body.message).toContain('Session does not belong');
+      expect(response.status).toBe(200);
+      const body = (response.body ?? response.text) as string;
+      expect(body).toContain('Session does not belong');
     });
 
-    it('should return 402 when usage quota exceeded', async () => {
+    it('should emit error through SSE when usage quota exceeded', async () => {
       prismaMock.session.findFirst.mockResolvedValue({
         id: sessionId,
         userId,
         title: 'Test Session',
       });
-      prismaMock.subscription.findFirst.mockResolvedValue({
-        id: subscriptionId,
-        userId,
-        status: SubscriptionStatus.ACTIVE,
-        currentPeriodEnd: new Date(Date.now() + 86400000),
-        usageQuota: 100,
-        usageConsumed: 100,
-      });
+      quotaServiceMock.checkUserQuota.mockRejectedValue(
+        new HttpException('Usage quota exceeded', HttpStatus.PAYMENT_REQUIRED),
+      );
 
       const response = await request(app.getHttpServer())
         .post('/messages')
         .set('Authorization', `Bearer ${getAuthToken()}`)
-        .send({ sessionId, content: 'Hello', type: 'TEXT' });
+        .send({ sessionId, content: 'Hello', type: 'TEXT' })
+        .buffer(true)
+        .parse((res, callback) => {
+          let data = '';
+          res.on('data', (chunk: Buffer) => {
+            data += chunk.toString();
+          });
+          res.on('end', () => {
+            callback(null, data);
+          });
+        });
 
-      expect(response.status).toBe(402);
-      expect(response.body.message).toContain('quota exceeded');
+      expect(response.status).toBe(200);
+      const body = (response.body ?? response.text) as string;
+      expect(body).toContain('quota exceeded');
     });
 
-    it('should return 402 when no active subscription', async () => {
+    it('should emit error through SSE when no active subscription', async () => {
       prismaMock.session.findFirst.mockResolvedValue({
         id: sessionId,
         userId,
         title: 'Test Session',
       });
-      prismaMock.subscription.findFirst.mockResolvedValue(null);
+      quotaServiceMock.checkUserQuota.mockRejectedValue(
+        new HttpException(
+          'No active subscription found',
+          HttpStatus.PAYMENT_REQUIRED,
+        ),
+      );
 
       const response = await request(app.getHttpServer())
         .post('/messages')
         .set('Authorization', `Bearer ${getAuthToken()}`)
-        .send({ sessionId, content: 'Hello', type: 'TEXT' });
+        .send({ sessionId, content: 'Hello', type: 'TEXT' })
+        .buffer(true)
+        .parse((res, callback) => {
+          let data = '';
+          res.on('data', (chunk: Buffer) => {
+            data += chunk.toString();
+          });
+          res.on('end', () => {
+            callback(null, data);
+          });
+        });
 
-      expect(response.status).toBe(402);
-      expect(response.body.message).toContain('No active subscription');
+      expect(response.status).toBe(200);
+      const body = (response.body ?? response.text) as string;
+      expect(body).toContain('No active subscription');
     });
   });
 

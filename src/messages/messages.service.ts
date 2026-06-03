@@ -2,21 +2,30 @@ import {
   Injectable,
   ForbiddenException,
   HttpException,
-  HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Observable, Subscriber } from 'rxjs';
 import { PrismaService } from '../common/prisma.service';
+import { QuotaService } from '../common/quota.service';
 import { SendMessageDto } from './dto/send-message.dto';
-import { MessageRole, MessageType, SubscriptionStatus } from '@prisma/client';
+import { MessageRole, MessageType } from '@prisma/client';
+import { KimiProvider, ChatMessage } from './kimi.provider';
 
 export interface SseChunk {
   chunk: string;
   done: boolean;
+  error?: string;
 }
 
 @Injectable()
 export class MessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(MessagesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly quotaService: QuotaService,
+    private readonly kimiProvider: KimiProvider,
+  ) {}
 
   async verifySessionOwnership(sessionId: string, userId: string) {
     const session = await this.prisma.session.findFirst({
@@ -35,29 +44,10 @@ export class MessagesService {
   }
 
   async checkUserQuota(userId: string) {
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        userId,
-        status: SubscriptionStatus.ACTIVE,
-        currentPeriodEnd: { gte: new Date() },
-      },
+    const result = await this.quotaService.checkUserQuota(userId);
+    return this.prisma.subscription.findUniqueOrThrow({
+      where: { id: result.subscription.id },
     });
-
-    if (!subscription) {
-      throw new HttpException(
-        'No active subscription found',
-        HttpStatus.PAYMENT_REQUIRED,
-      );
-    }
-
-    if (subscription.usageConsumed >= subscription.usageQuota) {
-      throw new HttpException(
-        'Usage quota exceeded',
-        HttpStatus.PAYMENT_REQUIRED,
-      );
-    }
-
-    return subscription;
   }
 
   async saveUserMessage(dto: SendMessageDto) {
@@ -83,12 +73,7 @@ export class MessagesService {
   }
 
   async incrementUsage(subscriptionId: string) {
-    await this.prisma.subscription.update({
-      where: { id: subscriptionId },
-      data: {
-        usageConsumed: { increment: 1 },
-      },
-    });
+    await this.quotaService.incrementUsage(subscriptionId);
   }
 
   async getMessages(sessionId: string, userId: string, page = 1, pageSize = 20) {
@@ -122,6 +107,7 @@ export class MessagesService {
     return new Observable((subscriber: Subscriber<SseChunk>) => {
       let cancelled = false;
       let fullContent = '';
+      const abortController = new AbortController();
 
       const run = async () => {
         try {
@@ -137,15 +123,17 @@ export class MessagesService {
           // 4. Increment usage
           await this.incrementUsage(subscription.id);
 
-          // 5. Mock AI stream
-          const chunks = this.mockAiStream(dto.content);
+          // 5. Build context messages (history + current)
+          const contextMessages = await this.buildContextMessages(dto);
 
-          for (const chunk of chunks) {
+          // 6. Stream real AI response
+          for await (const chunk of this.kimiProvider.streamChat(
+            contextMessages,
+            abortController.signal,
+          )) {
             if (cancelled) break;
             fullContent += chunk;
             subscriber.next({ chunk, done: false });
-            // Simulate network latency
-            await this.delay(50);
           }
 
           if (!cancelled) {
@@ -153,12 +141,26 @@ export class MessagesService {
             subscriber.complete();
           }
 
-          // 6. Save assistant message after stream
-          await this.saveAssistantMessage(dto.sessionId, fullContent);
-        } catch (err) {
-          if (!cancelled) {
-            subscriber.error(err);
+          // 7. Save assistant message after stream
+          if (fullContent) {
+            await this.saveAssistantMessage(dto.sessionId, fullContent);
           }
+        } catch (err: any) {
+          if (cancelled) return;
+
+          this.logger.error(
+            `Message stream error: ${err.message}`,
+            err.stack,
+          );
+
+          // Send error through SSE so frontend can handle gracefully
+          const errorMessage =
+            err instanceof HttpException
+              ? err.message
+              : '服务暂时不可用，请稍后再试';
+
+          subscriber.next({ chunk: '', done: true, error: errorMessage });
+          subscriber.complete();
         }
       };
 
@@ -166,18 +168,39 @@ export class MessagesService {
 
       return () => {
         cancelled = true;
+        abortController.abort();
       };
     });
   }
 
-  private mockAiStream(_userContent: string): string[] {
-    const reply =
-      '这是一个模拟的 AI 回复。在实际实现中，这里将调用真实的 AI Provider 生成流式内容。';
-    // Split into character chunks for streaming effect
-    return reply.split('');
-  }
+  private async buildContextMessages(
+    dto: SendMessageDto,
+  ): Promise<ChatMessage[]> {
+    // Fetch recent history (up to 20 rounds = 40 messages) excluding the current one
+    const history = await this.prisma.message.findMany({
+      where: {
+        sessionId: dto.sessionId,
+        role: { in: [MessageRole.USER, MessageRole.ASSISTANT] },
+        type: MessageType.TEXT,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    });
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    // Reverse to chronological order
+    history.reverse();
+
+    const messages: ChatMessage[] = history.map((msg) => ({
+      role: msg.role.toLowerCase() as 'user' | 'assistant' | 'system',
+      content: msg.content,
+    }));
+
+    // Append current user message
+    messages.push({
+      role: 'user',
+      content: dto.content,
+    });
+
+    return messages;
   }
 }

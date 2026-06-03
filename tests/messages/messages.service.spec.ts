@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MessagesService } from '../../src/messages/messages.service';
 import { PrismaService } from '../../src/common/prisma.service';
+import { QuotaService } from '../../src/common/quota.service';
+import { KimiProvider } from '../../src/messages/kimi.provider';
 import {
   ForbiddenException,
   HttpException,
@@ -22,6 +24,7 @@ describe('MessagesService', () => {
     },
     subscription: {
       findFirst: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
       update: jest.fn(),
     },
     message: {
@@ -29,6 +32,18 @@ describe('MessagesService', () => {
       findMany: jest.fn(),
       count: jest.fn(),
     },
+  };
+
+  const mockQuotaService = {
+    checkUserQuota: jest.fn(),
+    incrementUsage: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const mockKimiProvider = {
+    streamChat: jest.fn().mockImplementation(async function* () {
+      yield 'Hello';
+      yield ' world';
+    }),
   };
 
   const userId = 'user_test_123';
@@ -40,6 +55,8 @@ describe('MessagesService', () => {
       providers: [
         MessagesService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: QuotaService, useValue: mockQuotaService },
+        { provide: KimiProvider, useValue: mockKimiProvider },
       ],
     }).compile();
 
@@ -79,7 +96,21 @@ describe('MessagesService', () => {
 
   describe('checkUserQuota', () => {
     it('should return subscription if quota is available', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue({
+      mockQuotaService.checkUserQuota.mockResolvedValue({
+        subscription: {
+          id: subscriptionId,
+          usageQuota: 100,
+          usageConsumed: 10,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 86400000),
+        },
+        plan: {
+          id: 'plan-1',
+          name: 'Pro',
+          quotaLimits: { text_chats: -1 },
+        },
+      });
+      mockPrisma.subscription.findUniqueOrThrow.mockResolvedValue({
         id: subscriptionId,
         userId,
         status: SubscriptionStatus.ACTIVE,
@@ -94,7 +125,12 @@ describe('MessagesService', () => {
     });
 
     it('should throw 402 if no active subscription', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue(null);
+      mockQuotaService.checkUserQuota.mockRejectedValue(
+        new HttpException(
+          'No active subscription found',
+          HttpStatus.PAYMENT_REQUIRED,
+        ),
+      );
 
       await expect(service.checkUserQuota(userId)).rejects.toThrow(
         new HttpException(
@@ -105,14 +141,9 @@ describe('MessagesService', () => {
     });
 
     it('should throw 402 if quota exceeded', async () => {
-      mockPrisma.subscription.findFirst.mockResolvedValue({
-        id: subscriptionId,
-        userId,
-        status: SubscriptionStatus.ACTIVE,
-        currentPeriodEnd: new Date(Date.now() + 86400000),
-        usageQuota: 100,
-        usageConsumed: 100,
-      });
+      mockQuotaService.checkUserQuota.mockRejectedValue(
+        new HttpException('Usage quota exceeded', HttpStatus.PAYMENT_REQUIRED),
+      );
 
       await expect(service.checkUserQuota(userId)).rejects.toThrow(
         new HttpException('Usage quota exceeded', HttpStatus.PAYMENT_REQUIRED),
@@ -165,16 +196,11 @@ describe('MessagesService', () => {
 
   describe('incrementUsage', () => {
     it('should increment usageConsumed by 1', async () => {
-      mockPrisma.subscription.update.mockResolvedValue({});
-
       await service.incrementUsage(subscriptionId);
 
-      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: subscriptionId },
-        data: {
-          usageConsumed: { increment: 1 },
-        },
-      });
+      expect(mockQuotaService.incrementUsage).toHaveBeenCalledWith(
+        subscriptionId,
+      );
     });
   });
 
@@ -238,13 +264,19 @@ describe('MessagesService', () => {
         userId,
         title: 'Test Session',
       });
-      mockPrisma.subscription.findFirst.mockResolvedValue({
-        id: subscriptionId,
-        userId,
-        status: SubscriptionStatus.ACTIVE,
-        currentPeriodEnd: new Date(Date.now() + 86400000),
-        usageQuota: 100,
-        usageConsumed: 10,
+      mockQuotaService.checkUserQuota.mockResolvedValue({
+        subscription: {
+          id: subscriptionId,
+          usageQuota: 100,
+          usageConsumed: 10,
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 86400000),
+        },
+        plan: {
+          id: 'plan-1',
+          name: 'Pro',
+          quotaLimits: { text_chats: -1 },
+        },
       });
       mockPrisma.message.create.mockResolvedValue({});
       mockPrisma.subscription.update.mockResolvedValue({});
