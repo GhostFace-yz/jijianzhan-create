@@ -8,13 +8,18 @@ import { Observable, Subscriber } from 'rxjs';
 import { PrismaService } from '../common/prisma.service';
 import { QuotaService } from '../common/quota.service';
 import { SendMessageDto } from './dto/send-message.dto';
-import { MessageRole, MessageType } from '@prisma/client';
+import { MessageRole, MessageType, GenerationType } from '@prisma/client';
 import { KimiProvider, ChatMessage, KimiApiError } from './kimi.provider';
+import { GenerationTaskService } from '../generation-tasks/generation-task.service';
 
 export interface SseChunk {
   chunk: string;
   done: boolean;
   error?: string;
+  task?: {
+    taskId: string;
+    status: string;
+  };
 }
 
 @Injectable()
@@ -25,6 +30,7 @@ export class MessagesService {
     private readonly prisma: PrismaService,
     private readonly quotaService: QuotaService,
     private readonly kimiProvider: KimiProvider,
+    private readonly generationTaskService: GenerationTaskService,
   ) {}
 
   async verifySessionOwnership(sessionId: string, userId: string) {
@@ -114,19 +120,54 @@ export class MessagesService {
           // 1. Verify ownership
           await this.verifySessionOwnership(dto.sessionId, userId);
 
-          // 2. Check quota
+          // 2. Route by message type
+          const messageType = dto.type ?? MessageType.TEXT;
+
+          if (
+            messageType === MessageType.IMAGE_GEN ||
+            messageType === MessageType.VIDEO_GEN
+          ) {
+            // Generation task flow
+            const userMessage = await this.saveUserMessage(dto);
+            const generationType =
+              messageType === MessageType.IMAGE_GEN
+                ? GenerationType.IMAGE
+                : GenerationType.VIDEO;
+
+            const task = await this.generationTaskService.submitTask({
+              messageId: userMessage.id,
+              userId,
+              type: generationType,
+            });
+
+            if (!cancelled) {
+              subscriber.next({
+                chunk: '',
+                done: true,
+                task: {
+                  taskId: task.id,
+                  status: task.status,
+                },
+              });
+              subscriber.complete();
+            }
+            return;
+          }
+
+          // Text message flow (existing behaviour)
+          // 3. Check quota
           const subscription = await this.checkUserQuota(userId);
 
-          // 3. Save user message
+          // 4. Save user message
           await this.saveUserMessage(dto);
 
-          // 4. Increment usage
+          // 5. Increment usage
           await this.incrementUsage(subscription.id);
 
-          // 5. Build context messages (history + current)
+          // 6. Build context messages (history + current)
           const contextMessages = await this.buildContextMessages(dto);
 
-          // 6. Stream real AI response
+          // 7. Stream real AI response
           for await (const chunk of this.kimiProvider.streamChat(
             contextMessages,
             abortController.signal,
@@ -141,7 +182,7 @@ export class MessagesService {
             subscriber.complete();
           }
 
-          // 7. Save assistant message after stream
+          // 8. Save assistant message after stream
           if (fullContent) {
             await this.saveAssistantMessage(dto.sessionId, fullContent);
           }

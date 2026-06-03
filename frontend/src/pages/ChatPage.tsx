@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Paperclip,
   X,
+  AlertTriangle,
 } from 'lucide-react'
 import { connectMessageStream, getMessages } from '@/services/messages'
 import { getPresignedUrl, uploadToOSSWithProgress } from '@/services/uploads'
@@ -55,6 +56,11 @@ const TYPE_OPTIONS: { value: MessageType; label: string; icon: typeof MessageSqu
   { value: 'VIDEO_GEN', label: '视频', icon: Video },
 ]
 
+function isQuotaError(message: string): boolean {
+  const keywords = ['subscription', 'quota', 'PAYMENT_REQUIRED', '订阅', '额度']
+  return keywords.some((k) => message.toLowerCase().includes(k.toLowerCase()))
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -62,6 +68,8 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [errorAlert, setErrorAlert] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<string[]>([])
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const abortRef = useRef<(() => void) | null>(null)
@@ -76,16 +84,22 @@ export default function ChatPage() {
       Promise.resolve().then(() => {
         setMessages([])
         setIsLoadingHistory(false)
+        setLoadError(null)
       })
       return
     }
     let cancelled = false
+    setIsLoadingHistory(true)
+    setLoadError(null)
     getMessages(activeSessionId, { page: 1, pageSize: 200 })
       .then((data) => {
         if (!cancelled) setMessages(data.items)
       })
-      .catch(() => {
-        if (!cancelled) setMessages([])
+      .catch((err) => {
+        if (!cancelled) {
+          setMessages([])
+          setLoadError(err?.response?.data?.message || err?.message || '加载历史消息失败')
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingHistory(false)
@@ -116,6 +130,7 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, optimisticUserMessage])
     setInput('')
     setAttachments([])
+    setErrorAlert(null)
 
     if (type === 'TEXT') {
       setIsStreaming(true)
@@ -145,21 +160,24 @@ export default function ChatPage() {
         (error) => {
           setIsStreaming(false)
           setStreamingContent('')
-          const errorMessage: Message = {
-            id: `msg-${Date.now() + 1}`,
-            session_id: activeSessionId,
-            role: 'ASSISTANT',
-            content: `❌ 发送失败：${error.message}`,
-            type: 'TEXT',
-            created_at: new Date().toISOString(),
+          if (isQuotaError(error.message)) {
+            setErrorAlert(`发送失败：${error.message}`)
+          } else {
+            const errorMessage: Message = {
+              id: `msg-${Date.now() + 1}`,
+              session_id: activeSessionId,
+              role: 'ASSISTANT',
+              content: `❌ 发送失败：${error.message}`,
+              type: 'TEXT',
+              created_at: new Date().toISOString(),
+            }
+            setMessages((prev) => [...prev, errorMessage])
           }
-          setMessages((prev) => [...prev, errorMessage])
           abortRef.current = null
         }
       )
     } else {
       // IMAGE_GEN or VIDEO_GEN - backend currently routes all messages through text streaming
-      // We send via the messages API and display the text response with a generation notice
       setIsStreaming(true)
       setStreamingContent('')
 
@@ -169,9 +187,12 @@ export default function ChatPage() {
         () => {
           setIsStreaming(false)
           setStreamingContent((finalContent) => {
-            const prefix = type === 'IMAGE_GEN'
+            // Defensive: only prepend prefix if the backend stream did not already include it
+            const prefix = type === 'IMAGE_GEN' && !finalContent?.includes('🎨')
               ? '🎨 图片生成请求已提交，后端处理中...\n\n'
-              : '🎬 视频生成请求已提交，后端处理中...\n\n'
+              : type === 'VIDEO_GEN' && !finalContent?.includes('🎬')
+              ? '🎬 视频生成请求已提交，后端处理中...\n\n'
+              : ''
             const fullContent = prefix + (finalContent || '')
             const assistantMessage: Message = {
               id: `msg-${Date.now() + 1}`,
@@ -189,15 +210,19 @@ export default function ChatPage() {
         (error) => {
           setIsStreaming(false)
           setStreamingContent('')
-          const errorMessage: Message = {
-            id: `msg-${Date.now() + 1}`,
-            session_id: activeSessionId,
-            role: 'ASSISTANT',
-            content: `❌ 发送失败：${error.message}`,
-            type: 'TEXT',
-            created_at: new Date().toISOString(),
+          if (isQuotaError(error.message)) {
+            setErrorAlert(`发送失败：${error.message}`)
+          } else {
+            const errorMessage: Message = {
+              id: `msg-${Date.now() + 1}`,
+              session_id: activeSessionId,
+              role: 'ASSISTANT',
+              content: `❌ 发送失败：${error.message}`,
+              type: 'TEXT',
+              created_at: new Date().toISOString(),
+            }
+            setMessages((prev) => [...prev, errorMessage])
           }
-          setMessages((prev) => [...prev, errorMessage])
           abortRef.current = null
         }
       )
@@ -355,6 +380,32 @@ export default function ChatPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        {errorAlert && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex-1">{errorAlert}</div>
+            <button
+              onClick={() => setErrorAlert(null)}
+              className="shrink-0 text-destructive/70 hover:text-destructive"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {loadError && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex-1">{loadError}</div>
+            <button
+              onClick={() => setLoadError(null)}
+              className="shrink-0 text-destructive/70 hover:text-destructive"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {isLoadingHistory && messages.length === 0 && (
           <div className="flex items-center justify-center py-12">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -376,6 +427,8 @@ export default function ChatPage() {
               className={`max-w-[80%] rounded-lg px-4 py-2 text-sm ${
                 msg.role === 'USER'
                   ? 'bg-primary text-primary-foreground'
+                  : msg.content.startsWith('❌')
+                  ? 'bg-destructive/10 text-destructive border border-destructive/20'
                   : 'bg-muted text-muted-foreground'
               }`}
             >

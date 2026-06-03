@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import { PlanTier, SubscriptionStatus } from '@prisma/client';
 import { PrismaService } from '../common/prisma.service';
 
 export interface TokenPair {
@@ -46,6 +47,40 @@ export class AuthService {
       },
       select: { id: true, email: true, phone: true, name: true, createdAt: true },
     });
+
+    // Create default FREE subscription so new users can send messages immediately
+    const freePlan = await this.prisma.subscriptionPlan.findFirst({
+      where: { tier: PlanTier.FREE },
+    });
+
+    if (freePlan) {
+      const quotaLimits = (freePlan.quotaLimits as Record<string, number>) ?? {};
+      const usageQuota =
+        Object.values(quotaLimits).find((v) => typeof v === 'number' && v > 0) ??
+        0;
+      const now = new Date();
+      const periodEnd = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999,
+      );
+
+      await this.prisma.subscription.create({
+        data: {
+          userId: user.id,
+          planId: freePlan.id,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          usageQuota,
+          usageConsumed: 0,
+          status: SubscriptionStatus.ACTIVE,
+        },
+      });
+    }
 
     return user;
   }

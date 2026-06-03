@@ -18,6 +18,12 @@ describe('AuthService', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
     },
+    subscriptionPlan: {
+      findFirst: jest.fn(),
+    },
+    subscription: {
+      create: jest.fn(),
+    },
     refreshToken: {
       findMany: jest.fn(),
       create: jest.fn(),
@@ -60,7 +66,7 @@ describe('AuthService', () => {
   });
 
   describe('registerEmail', () => {
-    it('should create a new user with hashed password', async () => {
+    it('should create a new user with hashed password and default FREE subscription', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       mockPrisma.user.create.mockResolvedValue({
         id: 'user-1',
@@ -68,6 +74,16 @@ describe('AuthService', () => {
         phone: null,
         name: 'test',
         createdAt: new Date(),
+      });
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue({
+        id: 'plan-free',
+        tier: 'FREE',
+        quotaLimits: { text_chats: 50, image_gens: 0, video_gens: 0 },
+      });
+      mockPrisma.subscription.create.mockResolvedValue({
+        id: 'sub-1',
+        userId: 'user-1',
+        planId: 'plan-free',
       });
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
 
@@ -79,6 +95,37 @@ describe('AuthService', () => {
       });
       expect(bcrypt.hash).toHaveBeenCalledWith('Password123', 12);
       expect(mockPrisma.user.create).toHaveBeenCalled();
+      expect(mockPrisma.subscriptionPlan.findFirst).toHaveBeenCalledWith({
+        where: { tier: 'FREE' },
+      });
+      expect(mockPrisma.subscription.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'user-1',
+            planId: 'plan-free',
+            usageQuota: 50,
+            usageConsumed: 0,
+          }),
+        }),
+      );
+      expect(result.email).toBe('test@example.com');
+    });
+
+    it('should create user without subscription when no FREE plan exists', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'user-1',
+        email: 'test@example.com',
+        phone: null,
+        name: 'test',
+        createdAt: new Date(),
+      });
+      mockPrisma.subscriptionPlan.findFirst.mockResolvedValue(null);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+
+      const result = await service.registerEmail('test@example.com', 'Password123');
+
+      expect(mockPrisma.subscription.create).not.toHaveBeenCalled();
       expect(result.email).toBe('test@example.com');
     });
 

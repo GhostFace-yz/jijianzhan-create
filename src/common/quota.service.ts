@@ -38,7 +38,10 @@ export class QuotaService {
       );
     }
 
-    if (subscription.usageConsumed >= subscription.usageQuota) {
+    if (
+      subscription.usageQuota >= 0 &&
+      subscription.usageConsumed >= subscription.usageQuota
+    ) {
       throw new HttpException(
         'Usage quota exceeded',
         HttpStatus.PAYMENT_REQUIRED,

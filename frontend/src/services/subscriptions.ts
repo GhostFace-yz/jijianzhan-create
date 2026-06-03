@@ -34,8 +34,15 @@ export async function cancelSubscription(): Promise<Subscription> {
 }
 
 export async function getBills(params?: { page?: number; limit?: number }): Promise<PageResult<Bill>> {
-  const res = await api.get<ApiResponse<PageResult<Bill>>>('/subscriptions/bills', { params })
-  return res.data.data
+  const res = await api.get<ApiResponse<any>>('/subscriptions/bills', { params })
+  const result = res.data.data
+  // Backend returns { data: Bill[], pagination: { page, limit, total, total_pages } }
+  return {
+    items: result.data ?? [],
+    total: result.pagination?.total ?? 0,
+    page: result.pagination?.page ?? 1,
+    pageSize: result.pagination?.limit ?? 10,
+  }
 }
 
 export async function getQuota(): Promise<QuotaInfo> {

@@ -66,16 +66,14 @@ export default function Layout() {
   const handleCreateSession = useCallback(async () => {
     const session = await createSession()
     setSessions((prev) => [session, ...prev])
-    setSearchParams({ sessionId: session.id })
-    navigate('/')
-  }, [setSearchParams, navigate])
+    navigate({ pathname: '/', search: `?sessionId=${session.id}` })
+  }, [navigate])
 
   const handleSelectSession = useCallback(
     (sessionId: string) => {
-      setSearchParams({ sessionId })
-      navigate('/')
+      navigate({ pathname: '/', search: `?sessionId=${sessionId}` })
     },
-    [setSearchParams, navigate]
+    [navigate]
   )
 
   const handleRename = useCallback((session: Session) => {

@@ -3,6 +3,7 @@ import { MessagesService } from '../../src/messages/messages.service';
 import { PrismaService } from '../../src/common/prisma.service';
 import { QuotaService } from '../../src/common/quota.service';
 import { KimiProvider } from '../../src/messages/kimi.provider';
+import { GenerationTaskService } from '../../src/generation-tasks/generation-task.service';
 import {
   ForbiddenException,
   HttpException,
@@ -12,6 +13,7 @@ import {
   MessageRole,
   MessageType,
   SubscriptionStatus,
+  GenerationStatus,
 } from '@prisma/client';
 
 describe('MessagesService', () => {
@@ -46,6 +48,10 @@ describe('MessagesService', () => {
     }),
   };
 
+  const mockGenerationTaskService = {
+    submitTask: jest.fn(),
+  };
+
   const userId = 'user_test_123';
   const sessionId = 'session_test_456';
   const subscriptionId = 'sub_test_123';
@@ -57,6 +63,7 @@ describe('MessagesService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: QuotaService, useValue: mockQuotaService },
         { provide: KimiProvider, useValue: mockKimiProvider },
+        { provide: GenerationTaskService, useValue: mockGenerationTaskService },
       ],
     }).compile();
 
@@ -314,6 +321,130 @@ describe('MessagesService', () => {
             }),
           );
           // Verify assistant message will be saved
+          done();
+        },
+      });
+    }, 10000);
+
+    it('should submit generation task for IMAGE_GEN and return task info', (done) => {
+      mockPrisma.session.findFirst.mockResolvedValue({
+        id: sessionId,
+        userId,
+        title: 'Test Session',
+      });
+      mockPrisma.message.create.mockResolvedValue({
+        id: 'msg-gen-1',
+        sessionId,
+        role: MessageRole.USER,
+        content: 'Generate an image of a cat',
+        type: MessageType.IMAGE_GEN,
+      });
+      mockGenerationTaskService.submitTask.mockResolvedValue({
+        id: 'task-1',
+        status: GenerationStatus.PENDING,
+      });
+
+      const stream = service.createMessageStream(userId, {
+        sessionId,
+        content: 'Generate an image of a cat',
+        type: MessageType.IMAGE_GEN,
+      });
+
+      stream.subscribe({
+        next: (chunk) => {
+          expect(chunk.done).toBe(true);
+          expect(chunk.task).toEqual({
+            taskId: 'task-1',
+            status: 'PENDING',
+          });
+        },
+        error: (err) => done(err),
+        complete: () => {
+          expect(mockGenerationTaskService.submitTask).toHaveBeenCalledWith({
+            messageId: 'msg-gen-1',
+            userId,
+            type: 'IMAGE',
+          });
+          expect(mockQuotaService.checkUserQuota).not.toHaveBeenCalled();
+          done();
+        },
+      });
+    }, 10000);
+
+    it('should submit generation task for VIDEO_GEN and return task info', (done) => {
+      mockPrisma.session.findFirst.mockResolvedValue({
+        id: sessionId,
+        userId,
+        title: 'Test Session',
+      });
+      mockPrisma.message.create.mockResolvedValue({
+        id: 'msg-gen-2',
+        sessionId,
+        role: MessageRole.USER,
+        content: 'Generate a video of a sunset',
+        type: MessageType.VIDEO_GEN,
+      });
+      mockGenerationTaskService.submitTask.mockResolvedValue({
+        id: 'task-2',
+        status: GenerationStatus.PROCESSING,
+      });
+
+      const stream = service.createMessageStream(userId, {
+        sessionId,
+        content: 'Generate a video of a sunset',
+        type: MessageType.VIDEO_GEN,
+      });
+
+      stream.subscribe({
+        next: (chunk) => {
+          expect(chunk.done).toBe(true);
+          expect(chunk.task).toEqual({
+            taskId: 'task-2',
+            status: 'PROCESSING',
+          });
+        },
+        error: (err) => done(err),
+        complete: () => {
+          expect(mockGenerationTaskService.submitTask).toHaveBeenCalledWith({
+            messageId: 'msg-gen-2',
+            userId,
+            type: 'VIDEO',
+          });
+          done();
+        },
+      });
+    }, 10000);
+
+    it('should propagate generation task errors through SSE', (done) => {
+      mockPrisma.session.findFirst.mockResolvedValue({
+        id: sessionId,
+        userId,
+        title: 'Test Session',
+      });
+      mockPrisma.message.create.mockResolvedValue({
+        id: 'msg-gen-3',
+        sessionId,
+        role: MessageRole.USER,
+        content: 'Generate an image',
+        type: MessageType.IMAGE_GEN,
+      });
+      mockGenerationTaskService.submitTask.mockRejectedValue(
+        new HttpException('Quota exceeded', HttpStatus.PAYMENT_REQUIRED),
+      );
+
+      const stream = service.createMessageStream(userId, {
+        sessionId,
+        content: 'Generate an image',
+        type: MessageType.IMAGE_GEN,
+      });
+
+      stream.subscribe({
+        next: (chunk) => {
+          expect(chunk.done).toBe(true);
+          expect(chunk.error).toBe('Quota exceeded');
+        },
+        error: (err) => done(err),
+        complete: () => {
           done();
         },
       });
