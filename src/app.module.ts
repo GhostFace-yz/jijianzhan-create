@@ -9,6 +9,7 @@ import { MessagesModule } from './messages/messages.module';
 import { GenerationTasksModule } from './generation-tasks/generation-tasks.module';
 import { UsersModule } from './users/users.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     GenerationTasksModule,
     UsersModule,
     SubscriptionsModule,
+    UploadsModule,
   ],
   controllers: [],
   providers: [

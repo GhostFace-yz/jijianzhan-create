@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Outlet, useNavigate, useSearchParams } from 'react-router-dom'
+import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import {
   getSessions,
@@ -17,29 +17,40 @@ import {
   Trash2,
   Edit3,
   Loader2,
+  Search,
+  CreditCard,
+  Settings,
 } from 'lucide-react'
 
 export default function Layout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, logout } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [sessions, setSessions] = useState<Session[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
 
   const currentSessionId = searchParams.get('sessionId')
+  const isChatActive = location.pathname === '/' || location.pathname === ''
 
   useEffect(() => {
-    setIsLoading(true)
+    let cancelled = false
     getSessions()
-      .then((data) => {
-        setSessions(data)
+      .then((res) => {
+        if (!cancelled) setSessions(res.items)
       })
-      .catch(() => setSessions([]))
-      .finally(() => setIsLoading(false))
+      .catch(() => {
+        if (!cancelled) setSessions([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -56,13 +67,15 @@ export default function Layout() {
     const session = await createSession()
     setSessions((prev) => [session, ...prev])
     setSearchParams({ sessionId: session.id })
-  }, [setSearchParams])
+    navigate('/')
+  }, [setSearchParams, navigate])
 
   const handleSelectSession = useCallback(
     (sessionId: string) => {
       setSearchParams({ sessionId })
+      navigate('/')
     },
-    [setSearchParams]
+    [setSearchParams, navigate]
   )
 
   const handleRename = useCallback((session: Session) => {
@@ -100,6 +113,10 @@ export default function Layout() {
     [currentSessionId, setSearchParams]
   )
 
+  const filteredSessions = sessions.filter((s) =>
+    s.title.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     const now = new Date()
@@ -132,7 +149,7 @@ export default function Layout() {
           </button>
         </div>
 
-        <div className="p-3 border-b border-border">
+        <div className="p-3 border-b border-border space-y-2">
           <button
             onClick={handleCreateSession}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md border border-border bg-background hover:bg-muted transition-colors text-sm font-medium"
@@ -140,6 +157,16 @@ export default function Layout() {
             <Plus className="h-4 w-4" />
             新建会话
           </button>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索会话…"
+              className="w-full rounded-md border border-input bg-background pl-8 pr-3 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -149,17 +176,17 @@ export default function Layout() {
             </div>
           )}
 
-          {sessions.length === 0 && !isLoading && (
+          {filteredSessions.length === 0 && !isLoading && (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              暂无会话
+              {searchQuery ? '未找到匹配会话' : '暂无会话'}
             </div>
           )}
 
-          {sessions.map((session) => (
+          {filteredSessions.map((session) => (
             <div
               key={session.id}
               className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-md cursor-pointer transition-colors ${
-                currentSessionId === session.id
+                isChatActive && currentSessionId === session.id
                   ? 'bg-primary/10 text-primary'
                   : 'hover:bg-muted text-foreground'
               }`}
@@ -184,7 +211,7 @@ export default function Layout() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{session.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {formatDate(session.updatedAt)}
+                    {formatDate(session.updated_at)}
                   </p>
                 </div>
               )}
@@ -236,14 +263,40 @@ export default function Layout() {
           ))}
         </div>
 
-        <div className="border-t border-border p-3">
-          <div className="flex items-center justify-between gap-2">
+        <div className="border-t border-border p-3 space-y-1">
+          <button
+            onClick={() => navigate('/profile')}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+              location.pathname === '/profile'
+                ? 'bg-primary/10 text-primary'
+                : 'text-foreground hover:bg-muted'
+            }`}
+          >
+            <Settings className="h-4 w-4" />
+            用户中心
+          </button>
+          <button
+            onClick={() => navigate('/subscription')}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+              location.pathname === '/subscription'
+                ? 'bg-primary/10 text-primary'
+                : 'text-foreground hover:bg-muted'
+            }`}
+          >
+            <CreditCard className="h-4 w-4" />
+            订阅与额度
+          </button>
+          <div className="flex items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <User className="h-3.5 w-3.5 text-primary" />
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt="avatar" className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-3.5 w-3.5 text-primary" />
+                )}
               </div>
               <span className="text-sm text-foreground truncate">
-                {user?.email ?? '用户'}
+                {user?.name || user?.email || '用户'}
               </span>
             </div>
             <button

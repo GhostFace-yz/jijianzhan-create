@@ -9,7 +9,7 @@ import { PrismaService } from '../common/prisma.service';
 import { QuotaService } from '../common/quota.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { MessageRole, MessageType } from '@prisma/client';
-import { KimiProvider, ChatMessage } from './kimi.provider';
+import { KimiProvider, ChatMessage, KimiApiError } from './kimi.provider';
 
 export interface SseChunk {
   chunk: string;
@@ -157,7 +157,9 @@ export class MessagesService {
           const errorMessage =
             err instanceof HttpException
               ? err.message
-              : '服务暂时不可用，请稍后再试';
+              : err instanceof KimiApiError
+                ? err.message
+                : '服务暂时不可用，请稍后再试';
 
           subscriber.next({ chunk: '', done: true, error: errorMessage });
           subscriber.complete();
@@ -173,6 +175,9 @@ export class MessagesService {
     });
   }
 
+  private readonly MAX_CONTEXT_MESSAGES = 40;
+  private readonly MAX_CONTEXT_TOKENS = 4000;
+
   private async buildContextMessages(
     dto: SendMessageDto,
   ): Promise<ChatMessage[]> {
@@ -184,13 +189,13 @@ export class MessagesService {
         type: MessageType.TEXT,
       },
       orderBy: { createdAt: 'desc' },
-      take: 40,
+      take: this.MAX_CONTEXT_MESSAGES,
     });
 
     // Reverse to chronological order
     history.reverse();
 
-    const messages: ChatMessage[] = history.map((msg) => ({
+    let messages: ChatMessage[] = history.map((msg) => ({
       role: msg.role.toLowerCase() as 'user' | 'assistant' | 'system',
       content: msg.content,
     }));
@@ -201,6 +206,42 @@ export class MessagesService {
       content: dto.content,
     });
 
+    // Truncate by estimated token count, dropping oldest messages first
+    messages = this.truncateByTokens(messages, this.MAX_CONTEXT_TOKENS);
+
     return messages;
+  }
+
+  private truncateByTokens(
+    messages: ChatMessage[],
+    maxTokens: number,
+  ): ChatMessage[] {
+    let total = messages.reduce((sum, m) => sum + this.estimateTokens(m.content), 0);
+
+    while (total > maxTokens && messages.length > 1) {
+      const removed = messages.shift();
+      if (removed) {
+        total -= this.estimateTokens(removed.content);
+      }
+    }
+
+    return messages;
+  }
+
+  private estimateTokens(text: string): number {
+    // Rough heuristic for mixed Chinese / Latin content:
+    // Chinese characters ≈ 1 token each; other chars ≈ 0.25 token each.
+    let tokens = 0;
+    for (const char of text) {
+      const code = char.charCodeAt(0);
+      // CJK Unified Ideographs + Extension A + CJK symbols / punctuation / fullwidth
+      const isCjk =
+        (code >= 0x4e00 && code <= 0x9fff) ||
+        (code >= 0x3400 && code <= 0x4dbf) ||
+        (code >= 0x3000 && code <= 0x303f) ||
+        (code >= 0xff00 && code <= 0xffef);
+      tokens += isCjk ? 1 : 0.25;
+    }
+    return Math.ceil(tokens);
   }
 }

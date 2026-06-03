@@ -41,8 +41,8 @@ export default function RegisterPage() {
     }
     if (!password) {
       newErrors.password = '请输入密码'
-    } else if (password.length < 6) {
-      newErrors.password = '密码长度至少6位'
+    } else if (password.length < 8) {
+      newErrors.password = '密码长度至少8位'
     }
     if (!confirmPassword) {
       newErrors.confirmPassword = '请确认密码'
@@ -129,7 +129,7 @@ export default function RegisterPage() {
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="请输入密码（至少6位）"
+                placeholder="请输入密码（至少8位）"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value)

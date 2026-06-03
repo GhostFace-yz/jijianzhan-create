@@ -4,6 +4,8 @@ import Layout from '@/components/Layout'
 import ChatPage from '@/pages/ChatPage'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
+import ProfilePage from '@/pages/ProfilePage'
+import SubscriptionPage from '@/pages/SubscriptionPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -72,6 +74,8 @@ export default function App() {
           }
         >
           <Route index element={<ChatPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="subscription" element={<SubscriptionPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

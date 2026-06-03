@@ -1,20 +1,23 @@
 import { api } from './api'
 import { useAuthStore } from '@/stores/authStore'
 import type {
-  Message,
   ApiResponse,
   SendMessageRequest,
-  MessageListResponse,
+  Message,
+  PageResult,
 } from '@/types'
 
-export async function getMessages(sessionId: string): Promise<Message[]> {
-  const res = await api.get<ApiResponse<MessageListResponse>>(
-    `/messages?sessionId=${sessionId}`
-  )
-  return res.data.data.items
+export async function getMessages(
+  sessionId: string,
+  params?: { page?: number; pageSize?: number }
+): Promise<PageResult<Message>> {
+  const res = await api.get<ApiResponse<PageResult<Message>>>('/messages', {
+    params: { sessionId, ...params },
+  })
+  return res.data.data
 }
 
-export function sendMessageStream(
+export function connectMessageStream(
   request: SendMessageRequest,
   onChunk: (chunk: string) => void,
   onDone: () => void,
@@ -30,15 +33,13 @@ export function sendMessageStream(
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token ?? ''}`,
+          Accept: 'text/event-stream',
         },
         body: JSON.stringify(request),
         signal: controller.signal,
       })
 
       if (!res.ok) {
-        if (res.status === 402) {
-          throw new Error('额度已耗尽，请升级订阅计划')
-        }
         throw new Error(`HTTP ${res.status}`)
       }
 
@@ -65,6 +66,10 @@ export function sendMessageStream(
             }
             try {
               const parsed = JSON.parse(data)
+              if (parsed.error) {
+                onError(new Error(parsed.error))
+                return
+              }
               if (parsed.chunk) {
                 onChunk(parsed.chunk)
               }
@@ -90,4 +95,39 @@ export function sendMessageStream(
   doFetch()
 
   return () => controller.abort()
+}
+
+export async function sendMessage(
+  request: SendMessageRequest
+): Promise<{ message: Message; content: string }> {
+  return new Promise((resolve, reject) => {
+    let fullContent = ''
+    const abort = connectMessageStream(
+      request,
+      (chunk) => {
+        fullContent += chunk
+      },
+      () => {
+        clearTimeout(timeoutId)
+        const msg: Message = {
+          id: `msg-${Date.now()}`,
+          session_id: request.sessionId ?? '',
+          role: 'ASSISTANT',
+          content: fullContent,
+          type: request.type,
+          created_at: new Date().toISOString(),
+        }
+        resolve({ message: msg, content: fullContent })
+      },
+      (error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      }
+    )
+    // Safety timeout: abort if it takes too long
+    const timeoutId = setTimeout(() => {
+      abort()
+      reject(new Error('请求超时'))
+    }, 120000)
+  })
 }
