@@ -10,6 +10,7 @@ const entityTypeSchema = z.enum([
   'script',
   'node',
   'generation_result',
+  'location',
 ]);
 
 function entityFromParams(params: Record<string, string>): EntityRef {

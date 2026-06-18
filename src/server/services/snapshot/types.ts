@@ -10,7 +10,8 @@ export type EntityType =
   | 'scene'
   | 'script'
   | 'node'
-  | 'generation_result';
+  | 'generation_result'
+  | 'location';
 
 /**
  * 实体引用

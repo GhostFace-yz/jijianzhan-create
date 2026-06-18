@@ -11,6 +11,860 @@ servers:
     description: 本地开发服务
 
 paths:
+  /projects:
+    get:
+      summary: 列出项目
+      description: 返回当前用户的项目列表，支持状态筛选、标题搜索、排序和分页。
+      operationId: listProjects
+      tags:
+        - Projects
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ProjectStatus'
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: 标题关键字搜索
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum:
+              - updated_at_asc
+              - updated_at_desc
+            default: updated_at_desc
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProjectList'
+    post:
+      summary: 创建项目
+      description: 创建新项目，初始状态为 draft，不触发 AI 生成。
+      operationId: createProject
+      tags:
+        - Projects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: 获取项目详情
+      operationId: getProject
+      tags:
+        - Projects
+      responses:
+        '200':
+          description: 项目详情
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: 更新项目
+      operationId: updateProject
+      tags:
+        - Projects
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: 删除项目
+      operationId: deleteProject
+      tags:
+        - Projects
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: 列出项目角色
+      description: 返回指定项目下的所有角色卡片。
+      operationId: listCharacters
+      tags:
+        - Characters
+      responses:
+        '200':
+          description: 角色列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CharacterList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: 创建角色卡片
+      description: 手动创建角色卡片。
+      operationId: createCharacter
+      tags:
+        - Characters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCharacterRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters/auto-create:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 根据大纲自动创建角色
+      description: 根据已确认大纲中的 characters[] 批量创建角色卡片。
+      operationId: autoCreateCharacters
+      tags:
+        - Characters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoCreateCharactersRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters/{characterId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: characterId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: 获取角色详情
+      operationId: getCharacter
+      tags:
+        - Characters
+      responses:
+        '200':
+          description: 角色详情
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: 更新角色卡片
+      description: 更新角色字段，自动触发版本快照。
+      operationId: updateCharacter
+      tags:
+        - Characters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCharacterRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: 删除角色
+      operationId: deleteCharacter
+      tags:
+        - Characters
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters/{characterId}/generate-views:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: characterId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 生成三视图
+      description: 为角色生成正面、侧面、背面三视图。
+      operationId: generateCharacterViews
+      tags:
+        - Characters
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateViewsRequest'
+      responses:
+        '200':
+          description: 生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters/{characterId}/generate-views/{viewId}/retry:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: characterId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: viewId
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - front
+            - side
+            - back
+    post:
+      summary: 重新生成单张视图
+      description: 对指定视图（front/side/back）重新生成。
+      operationId: retryCharacterView
+      tags:
+        - Characters
+      responses:
+        '200':
+          description: 重新生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters/{characterId}/confirm-views:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: characterId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 确认三视图
+      description: 确认三视图并锁定参考图，自动触发扩展参考图生成。
+      operationId: confirmCharacterViews
+      tags:
+        - Characters
+      responses:
+        '200':
+          description: 确认成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters/{characterId}/generate-refs:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: characterId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 生成扩展参考图
+      description: 生成表情组（4 张）与场景站立图（2 张）。
+      operationId: generateCharacterRefs
+      tags:
+        - Characters
+      responses:
+        '200':
+          description: 生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/characters/{characterId}/rollback:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: characterId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 回滚到指定版本
+      description: 基于历史版本快照恢复角色数据。
+      operationId: rollbackCharacter
+      tags:
+        - Characters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackCharacterRequest'
+      responses:
+        '200':
+          description: 回滚成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Character'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: 列出项目场景卡片
+      description: 返回指定项目下的所有场景（location）卡片。
+      operationId: listLocations
+      tags:
+        - Locations
+      responses:
+        '200':
+          description: 场景卡片列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LocationList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations/{locationId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      summary: 更新场景卡片
+      description: 更新场景字段，自动触发版本快照。
+      operationId: updateLocation
+      tags:
+        - Locations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations/{locationId}/generate-base:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 生成基准候选图
+      description: 基于场景字段生成 3 张基准候选图，返回候选 URL 与 seed，不持久化。
+      operationId: generateBaseCandidates
+      tags:
+        - Locations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateBaseCandidatesRequest'
+      responses:
+        '200':
+          description: 候选图列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BaseCandidate'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations/{locationId}/confirm-base:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 确认基准图
+      description: 确认选中的基准候选图，持久化 base_seed 与 base_image_url，触发版本快照。
+      operationId: confirmBaseImage
+      tags:
+        - Locations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmBaseRequest'
+      responses:
+        '200':
+          description: 确认成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations/{locationId}/generate-variant:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 生成变体图
+      description: 基于已确认的 base_seed 与固定偏移生成指定变体图，返回 URL 与 seed，不持久化。
+      operationId: generateLocationVariant
+      tags:
+        - Locations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateVariantRequest'
+      responses:
+        '200':
+          description: 变体图结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VariantResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations/{locationId}/confirm-variant:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 确认变体图
+      description: 确认变体图并持久化到 variants 字典，key 为 `{time_of_day}-{weather}`，触发版本快照。
+      operationId: confirmLocationVariant
+      tags:
+        - Locations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmVariantRequest'
+      responses:
+        '200':
+          description: 确认成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations/{locationId}/versions:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: 获取场景历史版本
+      description: 返回场景卡片的版本快照列表（不含完整 content）。
+      operationId: listLocationVersions
+      tags:
+        - Locations
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: 版本历史
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SnapshotHistory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/locations/{locationId}/rollback:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 回滚场景到指定版本
+      description: 基于历史版本快照恢复场景卡片数据。
+      operationId: rollbackLocation
+      tags:
+        - Locations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackLocationRequest'
+      responses:
+        '200':
+          description: 回滚成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /projects/{projectId}/model-bindings:
     get:
       summary: 获取项目模型绑定
@@ -371,6 +1225,139 @@ paths:
 
 components:
   schemas:
+    ProjectStatus:
+      type: string
+      enum:
+        - draft
+        - outlining
+        - asset_prep
+        - producing
+        - completed
+
+    ProjectGenre:
+      type: string
+      enum:
+        - urban_romance
+        - ancient_costume
+        - suspense
+        - comedy
+        - sci_fi
+        - other
+
+    ProjectDurationGoal:
+      type: string
+      enum:
+        - 3min
+        - 5min
+        - 10min
+
+    ProjectStyleTag:
+      type: string
+      enum:
+        - realistic
+        - comic
+        - cyberpunk
+        - chinese_style
+        - fresh
+        - dark
+
+    ProjectMeta:
+      type: object
+      required:
+        - title
+        - description
+        - genre
+        - style_tags
+      properties:
+        title:
+          type: string
+          maxLength: 50
+          description: 项目标题
+        description:
+          type: string
+          maxLength: 1000
+          description: 创意描述
+        genre:
+          $ref: '#/components/schemas/ProjectGenre'
+        target_episodes:
+          type: integer
+          minimum: 1
+          maximum: 100
+          nullable: true
+          description: 目标集数，留空表示由 AI 后续建议
+        duration_goal:
+          $ref: '#/components/schemas/ProjectDurationGoal'
+          nullable: true
+          description: 时长目标
+        style_tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectStyleTag'
+          description: 风格标签
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          description: 创作备注
+
+    Project:
+      type: object
+      required:
+        - id
+        - user_id
+        - status
+        - meta
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        team_id:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ProjectStatus'
+        meta:
+          $ref: '#/components/schemas/ProjectMeta'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectList:
+      type: object
+      required:
+        - total
+        - projects
+      properties:
+        total:
+          type: integer
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+
+    CreateProjectRequest:
+      type: object
+      required:
+        - meta
+      properties:
+        meta:
+          $ref: '#/components/schemas/ProjectMeta'
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        meta:
+          $ref: '#/components/schemas/ProjectMeta'
+        status:
+          $ref: '#/components/schemas/ProjectStatus'
+
     ModelConfig:
       type: object
       required:
@@ -574,6 +1561,7 @@ components:
         - script
         - node
         - generation_result
+        - location
       description: 可编辑实体类型
 
     SnapshotSource:
@@ -722,6 +1710,440 @@ components:
         edited_by:
           type: string
           description: 执行回滚的用户 ID
+
+    CharacterRoleType:
+      type: string
+      enum:
+        - protagonist
+        - supporting
+        - antagonist
+      description: 角色定位
+
+    CharacterStatus:
+      type: string
+      enum:
+        - draft
+        - confirmed
+      description: 角色状态
+
+    CharacterRefImage:
+      type: object
+      required:
+        - view
+        - url
+        - seed
+      properties:
+        view:
+          type: string
+          description: 视图或参考图类型标识
+        url:
+          type: string
+          format: uri
+          description: 图片 URL
+        seed:
+          type: integer
+          description: 生成使用的种子
+
+    Character:
+      type: object
+      required:
+        - id
+        - project_id
+        - name
+        - role_type
+        - status
+        - ref_images
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role_type:
+          $ref: '#/components/schemas/CharacterRoleType'
+        episode_range:
+          type: string
+          nullable: true
+          description: 登场集数范围
+        appearance:
+          type: string
+          nullable: true
+          description: 外貌描述
+        costume:
+          type: string
+          nullable: true
+          description: 服装方案
+        expression:
+          type: string
+          nullable: true
+          description: 表情特征
+        signature_action:
+          type: string
+          nullable: true
+          description: 标志性动作
+        voice_description:
+          type: string
+          nullable: true
+          description: 声线描述
+        status:
+          $ref: '#/components/schemas/CharacterStatus'
+        ref_images:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterRefImage'
+        ip_adapter_id:
+          type: string
+          nullable: true
+          description: IP-Adapter 角色 Embedding ID
+        lora_path:
+          type: string
+          nullable: true
+          description: LoRA 模型路径
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CharacterList:
+      type: object
+      required:
+        - total
+        - characters
+      properties:
+        total:
+          type: integer
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Character'
+
+    CreateCharacterRequest:
+      type: object
+      required:
+        - name
+        - role_type
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        role_type:
+          $ref: '#/components/schemas/CharacterRoleType'
+        episode_range:
+          type: string
+          maxLength: 50
+          nullable: true
+        appearance:
+          type: string
+          maxLength: 2000
+          nullable: true
+        costume:
+          type: string
+          maxLength: 2000
+          nullable: true
+        expression:
+          type: string
+          maxLength: 2000
+          nullable: true
+        signature_action:
+          type: string
+          maxLength: 500
+          nullable: true
+        voice_description:
+          type: string
+          maxLength: 500
+          nullable: true
+        status:
+          $ref: '#/components/schemas/CharacterStatus'
+
+    UpdateCharacterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        role_type:
+          $ref: '#/components/schemas/CharacterRoleType'
+        episode_range:
+          type: string
+          maxLength: 50
+          nullable: true
+        appearance:
+          type: string
+          maxLength: 2000
+          nullable: true
+        costume:
+          type: string
+          maxLength: 2000
+          nullable: true
+        expression:
+          type: string
+          maxLength: 2000
+          nullable: true
+        signature_action:
+          type: string
+          maxLength: 500
+          nullable: true
+        voice_description:
+          type: string
+          maxLength: 500
+          nullable: true
+        status:
+          $ref: '#/components/schemas/CharacterStatus'
+
+    AutoCreateCharactersRequest:
+      type: object
+      required:
+        - characters
+      properties:
+        characters:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CreateCharacterRequest'
+
+    GenerateViewsRequest:
+      type: object
+      properties:
+        seed:
+          type: integer
+          description: 固定种子，不传则根据角色 ID 与视图计算
+        width:
+          type: integer
+        height:
+          type: integer
+        style_preset:
+          type: string
+
+    RollbackCharacterRequest:
+      type: object
+      required:
+        - version_id
+      properties:
+        version_id:
+          type: string
+          pattern: '^v\d+$'
+          description: 目标版本号
+
+    LocationStatus:
+      type: string
+      enum:
+        - draft
+        - confirmed
+      description: 场景卡片状态
+
+    LocationVariant:
+      type: object
+      required:
+        - image_url
+        - prompt
+        - seed
+      properties:
+        image_url:
+          type: string
+          format: uri
+        prompt:
+          type: string
+        seed:
+          type: integer
+
+    Location:
+      type: object
+      required:
+        - id
+        - project_id
+        - name
+        - status
+        - key_props
+        - variants
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        frequency:
+          type: string
+          nullable: true
+        space_type:
+          type: string
+          nullable: true
+        style:
+          type: string
+          nullable: true
+        color_tone:
+          type: string
+          nullable: true
+        lighting_type:
+          type: string
+          nullable: true
+        key_props:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/LocationStatus'
+        base_seed:
+          type: integer
+          nullable: true
+        base_image_url:
+          type: string
+          format: uri
+          nullable: true
+        variants:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LocationVariant'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    LocationList:
+      type: object
+      required:
+        - total
+        - locations
+      properties:
+        total:
+          type: integer
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Location'
+
+    UpdateLocationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        frequency:
+          type: string
+          maxLength: 50
+          nullable: true
+        space_type:
+          type: string
+          maxLength: 50
+          nullable: true
+        style:
+          type: string
+          maxLength: 200
+          nullable: true
+        color_tone:
+          type: string
+          maxLength: 100
+          nullable: true
+        lighting_type:
+          type: string
+          maxLength: 100
+          nullable: true
+        key_props:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/LocationStatus'
+
+    BaseCandidate:
+      type: object
+      required:
+        - url
+        - seed
+        - prompt
+      properties:
+        url:
+          type: string
+          format: uri
+        seed:
+          type: integer
+        prompt:
+          type: string
+
+    GenerateBaseCandidatesRequest:
+      type: object
+      properties:
+        seed:
+          type: integer
+          description: 固定种子，不传则根据 locationId 计算
+
+    ConfirmBaseRequest:
+      type: object
+      required:
+        - candidate
+      properties:
+        candidate:
+          $ref: '#/components/schemas/BaseCandidate'
+
+    VariantResult:
+      type: object
+      required:
+        - url
+        - seed
+        - prompt
+      properties:
+        url:
+          type: string
+          format: uri
+        seed:
+          type: integer
+        prompt:
+          type: string
+
+    GenerateVariantRequest:
+      type: object
+      required:
+        - time_of_day
+        - weather
+      properties:
+        time_of_day:
+          type: string
+        weather:
+          type: string
+
+    ConfirmVariantRequest:
+      type: object
+      required:
+        - time_of_day
+        - weather
+        - variant
+      properties:
+        time_of_day:
+          type: string
+        weather:
+          type: string
+        variant:
+          $ref: '#/components/schemas/VariantResult'
+
+    RollbackLocationRequest:
+      type: object
+      required:
+        - version_id
+      properties:
+        version_id:
+          type: string
+          pattern: '^v\d+$'
+          description: 目标版本号
 
     ErrorResponse:
       type: object

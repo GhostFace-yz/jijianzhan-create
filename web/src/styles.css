@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #5645d4;
+  --color-primary-pressed: #4534b3;
+  --color-primary-deep: #3a2a99;
+  --color-on-primary: #ffffff;
+  --color-brand-navy: #0a1530;
+  --color-brand-navy-deep: #070f24;
+  --color-brand-navy-mid: #1a2a52;
+  --color-link-blue: #0075de;
+  --color-link-blue-pressed: #005bab;
+  --color-brand-orange: #dd5b00;
+  --color-brand-orange-deep: #793400;
+  --color-brand-pink: #ff64c8;
+  --color-brand-pink-deep: #a02e6d;
+  --color-brand-purple: #7b3ff2;
+  --color-brand-purple-300: #d6b6f6;
+  --color-brand-purple-800: #391c57;
+  --color-brand-teal: #2a9d99;
+  --color-brand-green: #1aae39;
+  --color-brand-yellow: #f5d75e;
+  --color-brand-brown: #523410;
+  --color-card-tint-peach: #ffe8d4;
+  --color-card-tint-rose: #fde0ec;
+  --color-card-tint-mint: #d9f3e1;
+  --color-card-tint-lavender: #e6e0f5;
+  --color-card-tint-sky: #dcecfa;
+  --color-card-tint-yellow: #fef7d6;
+  --color-card-tint-yellow-bold: #f9e79f;
+  --color-card-tint-cream: #f8f5e8;
+  --color-card-tint-gray: #f0eeec;
+  --color-canvas: #ffffff;
+  --color-surface: #f6f5f4;
+  --color-surface-soft: #fafaf9;
+  --color-hairline: #e5e3df;
+  --color-hairline-soft: #ede9e4;
+  --color-hairline-strong: #c8c4be;
+  --color-ink-deep: #000000;
+  --color-ink: #1a1a1a;
+  --color-charcoal: #37352f;
+  --color-slate: #5d5b54;
+  --color-steel: #787671;
+  --color-stone: #a4a097;
+  --color-muted: #bbb8b1;
+  --color-on-dark: #ffffff;
+  --color-on-dark-muted: #a4a097;
+  --color-semantic-success: #1aae39;
+  --color-semantic-warning: #dd5b00;
+  --color-semantic-error: #e03131;
+
+  --font-sans: "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

@@ -72,3 +72,93 @@ model DownstreamReviewFlag {
   @@index([status])
   @@map("downstream_review_flags")
 }
+
+enum ProjectStatus {
+  draft
+  outlining
+  asset_prep
+  producing
+  completed
+
+  @@map("project_status")
+}
+
+model Project {
+  id         String        @id @default(uuid())
+  user_id    String        @default("system")
+  team_id    String?
+  status     ProjectStatus @default(draft)
+  meta       Json
+  created_at DateTime      @default(now())
+  updated_at DateTime      @updatedAt
+
+  @@index([user_id, updated_at(sort: Desc)])
+  @@index([status])
+  @@map("projects")
+}
+
+enum RoleType {
+  protagonist
+  supporting
+  antagonist
+
+  @@map("role_types")
+}
+
+enum CharacterStatus {
+  draft
+  confirmed
+
+  @@map("character_status")
+}
+
+model Character {
+  id                String          @id @default(uuid())
+  project_id        String
+  name              String
+  role_type         RoleType
+  episode_range     String?
+  appearance        String?
+  costume           String?
+  expression        String?
+  signature_action  String?
+  voice_description String?
+  status            CharacterStatus @default(draft)
+  ref_images        Json            @default("[]")
+  ip_adapter_id     String?
+  lora_path         String?
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @updatedAt
+
+  @@index([project_id])
+  @@map("characters")
+}
+
+enum LocationStatus {
+  draft
+  confirmed
+
+  @@map("location_status")
+}
+
+model Location {
+  id              String         @id @default(uuid())
+  project_id      String
+  name            String
+  description     String?
+  frequency       String?
+  space_type      String?
+  style           String?
+  color_tone      String?
+  lighting_type   String?
+  key_props       Json           @default("[]")
+  status          LocationStatus @default(draft)
+  base_seed       Int?
+  base_image_url  String?
+  variants        Json           @default("{}")
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+
+  @@index([project_id])
+  @@map("locations")
+}
