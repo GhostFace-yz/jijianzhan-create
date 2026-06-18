@@ -1,0 +1,36 @@
+{
+  "name": "jijianzhan-create",
+  "version": "0.1.0",
+  "description": "极简栈创造 - AI 辅助短剧生产平台",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "test": "DATABASE_URL=file:./src/server/prisma/test.db vitest run",
+    "test:watch": "DATABASE_URL=file:./src/server/prisma/test.db vitest",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate --schema=src/server/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=src/server/prisma/schema.prisma",
+    "db:push": "prisma db push --schema=src/server/prisma/schema.prisma",
+    "db:test:deploy": "DATABASE_URL=file:./src/server/prisma/test.db prisma migrate deploy --schema=src/server/prisma/schema.prisma",
+    "postinstall": "npm run db:generate"
+  },
+  "prisma": {
+    "schema": "src/server/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^7.2.0",
+    "prisma": "^6.19.3",
+    "supertest": "^7.2.2",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.25.76"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "express": "^5.2.1"
+  }
+}

@@ -1,0 +1,74 @@
+// 本 Schema 使用 SQLite 作为本地开发与测试数据库。
+// 生产环境将迁移至 PostgreSQL 17（ADR-001），Schema 类型保持兼容。
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SnapshotSource {
+  ai_generated
+  user_edited
+  ai_regenerated
+  locked
+}
+
+enum ReviewStatus {
+  pending_review
+  resolved
+  dismissed
+}
+
+model VersionSnapshot {
+  id                   String         @id @default(uuid())
+  project_id           String
+  entity_type          String
+  entity_id            String
+  version_number       Int
+  version_id           String
+  source               SnapshotSource
+  content              Json
+  parent_version_number Int?
+  diff                 Json
+  edited_by            String?
+  ai_model             Json?
+  prompt_override      String?
+  created_at           DateTime       @default(now())
+
+  @@unique([project_id, entity_type, entity_id, version_number])
+  @@index([project_id, entity_type, entity_id, version_number(sort: Desc)])
+  @@index([project_id, entity_type, entity_id, created_at(sort: Desc)])
+  @@map("version_snapshots")
+}
+
+model VersionCounter {
+  project_id  String
+  entity_type String
+  entity_id   String
+  counter     Int      @default(0)
+  updated_at  DateTime @updatedAt
+
+  @@id([project_id, entity_type, entity_id])
+  @@map("version_counters")
+}
+
+model DownstreamReviewFlag {
+  id                  String       @id @default(uuid())
+  project_id          String
+  source_entity_type  String
+  source_entity_id    String
+  source_version_id   String
+  new_version_id      String
+  status              ReviewStatus @default(pending_review)
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  @@index([project_id, source_entity_type, source_entity_id])
+  @@index([status])
+  @@map("downstream_review_flags")
+}

@@ -1,0 +1,15 @@
+{
+  "project_id": "6618f99e-5664-48d3-afb1-ec721333f4bd",
+  "project_title": "极简栈创造",
+  "resources": [
+    {
+      "id": "e94c1bfd-29f2-48b3-8b1f-f3e3000f5311",
+      "resource_type": "local_directory",
+      "resource_ref": {
+        "label": "jijianzhan-create",
+        "daemon_id": "019e3a30-d930-7635-9ca1-4578d162031e",
+        "local_path": "/Users/yangzheng/programme/my_project/jijianzhan-create"
+      }
+    }
+  ]
+}

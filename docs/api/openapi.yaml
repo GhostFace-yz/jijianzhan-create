@@ -1,0 +1,756 @@
+openapi: 3.0.3
+info:
+  title: 极简栈创造 AI 生成接口
+  description: |
+    涉及 AI 适配器层的对外接口规范，包括模型绑定、生成任务、Adapter 健康检查。
+  version: 1.0.0
+  contact:
+    name: Core · 后端工程师
+servers:
+  - url: /api/v1
+    description: 本地开发服务
+
+paths:
+  /projects/{projectId}/model-bindings:
+    get:
+      summary: 获取项目模型绑定
+      description: 返回项目在各生成节点上使用的 AI 模型配置（主模型 + fallback 链）。
+      operationId: getProjectModelBindings
+      tags:
+        - Model Bindings
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 项目模型绑定配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectModelBindings'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: 更新项目模型绑定
+      description: |
+        修改项目默认模型绑定或某个节点的模型绑定。切换后下次生成生效。
+      operationId: updateProjectModelBindings
+      tags:
+        - Model Bindings
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectModelBindings'
+      responses:
+        '200':
+          description: 更新后的模型绑定
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectModelBindings'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/generate:
+    post:
+      summary: 创建 AI 生成任务
+      description: |
+        根据节点类型和模型绑定创建生成任务。任务进入 BullMQ 队列，
+        通过 SSE `/events/{jobId}` 推送进度。
+      operationId: createGenerationTask
+      tags:
+        - Generation
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationTaskRequest'
+      responses:
+        '202':
+          description: 任务已接受
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /adapters/health:
+    get:
+      summary: 获取 Adapter 健康状态
+      description: 返回所有已注册 Adapter 的最新健康检查结果。
+      operationId: getAdapterHealth
+      tags:
+        - Adapters
+      responses:
+        '200':
+          description: Adapter 健康报告
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterHealthReport'
+
+  /adapters/providers:
+    get:
+      summary: 列出可用 Adapter Provider
+      description: 返回按任务类型分类的已注册 provider 列表。
+      operationId: listAdapterProviders
+      tags:
+        - Adapters
+      responses:
+        '200':
+          description: Provider 列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterProviderList'
+
+  /projects/{projectId}/entities/{entityType}/{entityId}/versions:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: entityType
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/EntityType'
+      - name: entityId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      summary: 获取实体的版本历史
+      description: 返回指定实体的版本快照列表（不含完整 content），按版本号降序排列。
+      operationId: listVersionSnapshots
+      tags:
+        - Version Snapshots
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: 版本历史
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotHistory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: 创建版本快照
+      description: |
+        为指定实体创建新版本快照。首次创建时 parent_version 为空，
+        后续版本自动计算与上一版本的字段级 diff。
+      operationId: createVersionSnapshot
+      tags:
+        - Version Snapshots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SnapshotCreateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Snapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/entities/{entityType}/{entityId}/versions/compare:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: entityType
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/EntityType'
+      - name: entityId
+        in: path
+        required: true
+        schema:
+          type: string
+
+    get:
+      summary: 对比两个版本
+      description: 返回 from 到 to 两个版本之间的字段级 diff。
+      operationId: compareVersionSnapshots
+      tags:
+        - Version Snapshots
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^v\d+$'
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: '^v\d+$'
+      responses:
+        '200':
+          description: 对比结果
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DiffResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/entities/{entityType}/{entityId}/versions/{versionId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: entityType
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/EntityType'
+      - name: entityId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^v\d+$'
+
+    get:
+      summary: 获取单个版本快照
+      description: 返回指定版本的完整快照，包括 content。
+      operationId: getVersionSnapshot
+      tags:
+        - Version Snapshots
+      responses:
+        '200':
+          description: 版本快照详情
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Snapshot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/entities/{entityType}/{entityId}/versions/{versionId}/rollback:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: entityType
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/EntityType'
+      - name: entityId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^v\d+$'
+
+    post:
+      summary: 回滚到指定版本
+      description: |
+        基于指定历史版本的内容创建一个新版本（source 为 user_edited），
+        并触发变更传播，将下游节点标记为「需检查」。
+      operationId: rollbackVersionSnapshot
+      tags:
+        - Version Snapshots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackRequest'
+      responses:
+        '201':
+          description: 回滚成功，返回新版本快照
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Snapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    ModelConfig:
+      type: object
+      required:
+        - provider
+        - model
+      properties:
+        provider:
+          type: string
+          description: Provider ID，对应已注册的 Adapter
+          example: mock-text
+        model:
+          type: string
+          description: 模型标识
+          example: mock-model
+        apiKey:
+          type: string
+          description: 运行时注入的 API Key，不持久化
+          writeOnly: true
+        baseUrl:
+          type: string
+          format: uri
+          description: 自定义 endpoint
+        extraParams:
+          type: object
+          description: 供应商特有参数透传
+        timeoutMs:
+          type: integer
+          description: 请求超时毫秒
+          example: 30000
+        maxRetries:
+          type: integer
+          description: 最大重试次数
+          example: 2
+
+    ModelBinding:
+      type: object
+      required:
+        - taskType
+        - primary
+      properties:
+        taskType:
+          type: string
+          enum:
+            - text
+            - image
+            - video
+            - tts
+            - music
+          description: 任务类型
+        primary:
+          $ref: '#/components/schemas/ModelConfig'
+        fallbacks:
+          type: array
+          description: 按优先级排序的备用模型配置
+          items:
+            $ref: '#/components/schemas/ModelConfig'
+
+    ProjectModelBindings:
+      type: object
+      required:
+        - outline
+        - script
+        - storyboard
+        - character_img
+        - scene_img
+        - video
+        - video_fallback
+        - tts
+        - music
+      properties:
+        outline:
+          $ref: '#/components/schemas/ModelBinding'
+        script:
+          $ref: '#/components/schemas/ModelBinding'
+        storyboard:
+          $ref: '#/components/schemas/ModelBinding'
+        character_img:
+          $ref: '#/components/schemas/ModelBinding'
+        scene_img:
+          $ref: '#/components/schemas/ModelBinding'
+        video:
+          $ref: '#/components/schemas/ModelBinding'
+        video_fallback:
+          $ref: '#/components/schemas/ModelBinding'
+        tts:
+          $ref: '#/components/schemas/ModelBinding'
+        music:
+          $ref: '#/components/schemas/ModelBinding'
+
+    GenerationTaskRequest:
+      type: object
+      required:
+        - taskType
+        - nodeId
+        - params
+      properties:
+        taskType:
+          type: string
+          enum:
+            - text
+            - image
+            - video
+            - tts
+            - music
+          description: 生成任务类型
+        nodeId:
+          type: string
+          description: 触发生成的节点 ID
+        episodeId:
+          type: string
+          description: 所属单集 ID
+        params:
+          type: object
+          description: 生成参数，按任务类型不同
+        modelBinding:
+          $ref: '#/components/schemas/ModelBinding'
+          description: 节点级模型绑定覆盖，不传则使用项目默认
+
+    GenerationTaskResponse:
+      type: object
+      required:
+        - jobId
+        - status
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - completed
+            - failed
+        eventsUrl:
+          type: string
+          format: uri
+          description: SSE 进度推送地址
+          example: /api/v1/events/{jobId}
+
+    AdapterHealthReport:
+      type: object
+      required:
+        - text
+        - image
+        - video
+        - tts
+        - music
+      properties:
+        text:
+          $ref: '#/components/schemas/ProviderHealthMap'
+        image:
+          $ref: '#/components/schemas/ProviderHealthMap'
+        video:
+          $ref: '#/components/schemas/ProviderHealthMap'
+        tts:
+          $ref: '#/components/schemas/ProviderHealthMap'
+        music:
+          $ref: '#/components/schemas/ProviderHealthMap'
+
+    ProviderHealthMap:
+      type: object
+      additionalProperties:
+        type: string
+        enum:
+          - available
+          - degraded
+          - unavailable
+
+    AdapterProviderList:
+      type: object
+      required:
+        - providers
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            required:
+              - taskType
+              - provider
+            properties:
+              taskType:
+                type: string
+                enum:
+                  - text
+                  - image
+                  - video
+                  - tts
+                  - music
+              provider:
+                type: string
+
+    EntityType:
+      type: string
+      enum:
+        - project
+        - outline
+        - character
+        - scene
+        - script
+        - node
+        - generation_result
+      description: 可编辑实体类型
+
+    SnapshotSource:
+      type: string
+      enum:
+        - ai_generated
+        - user_edited
+        - ai_regenerated
+        - locked
+      description: 版本快照来源
+
+    AIModelInfo:
+      type: object
+      required:
+        - provider
+        - model
+      properties:
+        provider:
+          type: string
+          example: openai
+        model:
+          type: string
+          example: gpt-4o
+
+    SnapshotMeta:
+      type: object
+      required:
+        - id
+        - versionId
+        - versionNumber
+        - source
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        versionId:
+          type: string
+          example: v3
+          pattern: '^v\d+$'
+        versionNumber:
+          type: integer
+          example: 3
+        source:
+          $ref: '#/components/schemas/SnapshotSource'
+        editedBy:
+          type: string
+          nullable: true
+          description: 用户编辑时的用户 ID
+        aiModel:
+          $ref: '#/components/schemas/AIModelInfo'
+          nullable: true
+          description: AI 生成时记录的模型配置
+        promptOverride:
+          type: string
+          nullable: true
+          description: 用户给 AI 的额外指令
+        parentVersionNumber:
+          type: integer
+          nullable: true
+          description: 父版本号
+        createdAt:
+          type: string
+          format: date-time
+
+    Snapshot:
+      allOf:
+        - $ref: '#/components/schemas/SnapshotMeta'
+        - type: object
+          required:
+            - content
+            - diff
+          properties:
+            content:
+              type: object
+              description: 该版本的完整内容
+            diff:
+              type: object
+              additionalProperties:
+                type: string
+                enum:
+                  - added
+                  - changed
+                  - removed
+              description: 与父版本的字段级差异
+
+    SnapshotHistory:
+      type: object
+      required:
+        - total
+        - versions
+      properties:
+        total:
+          type: integer
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SnapshotMeta'
+
+    DiffResult:
+      type: object
+      required:
+        - fromVersionId
+        - toVersionId
+        - diff
+      properties:
+        fromVersionId:
+          type: string
+          example: v1
+        toVersionId:
+          type: string
+          example: v3
+        diff:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+              - added
+              - changed
+              - removed
+          description: 字段级差异，键为点号路径
+
+    SnapshotCreateRequest:
+      type: object
+      required:
+        - source
+        - content
+      properties:
+        source:
+          $ref: '#/components/schemas/SnapshotSource'
+        content:
+          type: object
+          description: 该版本的完整内容
+        edited_by:
+          type: string
+          description: 用户编辑时的用户 ID
+        ai_model:
+          $ref: '#/components/schemas/AIModelInfo'
+        prompt_override:
+          type: string
+          description: 用户给 AI 的额外指令
+
+    RollbackRequest:
+      type: object
+      properties:
+        edited_by:
+          type: string
+          description: 执行回滚的用户 ID
+
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: 统一错误码
+          example: AI_TIMEOUT
+        message:
+          type: string
+          description: 错误信息（不暴露堆栈）
+        retryable:
+          type: boolean
+          description: 是否为可用性错误，可触发 fallback
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
