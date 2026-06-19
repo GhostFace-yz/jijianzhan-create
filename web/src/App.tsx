@@ -11,6 +11,10 @@ const OutlinePage = lazy(() =>
   import('./pages/OutlinePage').then((m) => ({ default: m.OutlinePage }))
 );
 
+const ScriptPage = lazy(() =>
+  import('./pages/ScriptPage').then((m) => ({ default: m.ScriptPage }))
+);
+
 function PageFallback() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-surface-soft">
@@ -38,6 +42,14 @@ export function App() {
         <Route path="/projects/:projectId/characters/:characterId" element={<CharacterDetailPage />} />
         <Route path="/projects/:projectId/locations" element={<LocationListPage />} />
         <Route path="/projects/:projectId/locations/:locationId" element={<LocationDetailPage />} />
+        <Route
+          path="/projects/:id/episodes/:epId/script"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <ScriptPage />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

@@ -439,3 +439,58 @@ export interface SnapshotHistoryResponse {
 export interface SnapshotResponse {
   data: Snapshot;
 }
+
+// ── Script (YZ-58) ──
+
+export interface Dialogue {
+  char_id: string;
+  text: string;
+  emotion: string;
+  note?: string;
+}
+
+export interface ScriptScene {
+  scene_id: string;
+  location_id: string;
+  time_of_day: string;
+  weather: string;
+  characters_present: string[];
+  scene_summary: string;
+  beats: string[];
+  dialogues: Dialogue[];
+}
+
+export interface EndState {
+  character_states: { char_id: string; emotion: string; location: string }[];
+  unresolved_conflicts: string[];
+  key_prop_states: Record<string, string>;
+}
+
+export interface ScriptData {
+  episode_title: string;
+  scenes: ScriptScene[];
+  end_state: EndState;
+}
+
+export interface ScriptGenerateResponse {
+  data: ScriptData;
+}
+
+export interface ScriptUpdateResponse {
+  data: ScriptData;
+}
+
+export interface RegenerateSceneResponse {
+  data: {
+    scene: ScriptScene;
+    scene_id: string;
+  };
+}
+
+export interface ScriptUpdateInput {
+  scenes?: ScriptScene[];
+  end_state?: EndState;
+}
+
+/** Duration type for script editing status */
+export type ScriptStatus = 'none' | 'generating' | 'ready' | 'editing';
