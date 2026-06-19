@@ -865,6 +865,189 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /projects/{projectId}/outline:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: 获取大纲
+      description: 返回当前项目的大纲数据及锁定状态。无大纲时返回 outline: null 而非 404。
+      operationId: getOutline
+      tags:
+        - Outline
+      responses:
+        '200':
+          description: 大纲摘要（含锁定状态）
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OutlineSummary'
+    put:
+      summary: 更新大纲
+      description: 保存用户编辑后的大纲，自动创建 user_edited 版本快照。
+      operationId: updateOutline
+      tags:
+        - Outline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOutlineRequest'
+      responses:
+        '200':
+          description: 更新后的大纲
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OutlineData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/outline/generate:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 生成大纲
+      description: 调用文本 AI 生成结构化大纲，存储到 project.outline 字段并创建 ai_generated 版本快照。
+      operationId: generateOutline
+      tags:
+        - Outline
+      responses:
+        '201':
+          description: 大纲生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OutlineData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/outline/validate:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 剧本医生自洽性检查
+      description: 执行大纲自洽性检查（角色位置矛盾、道具状态追踪、情绪曲线、服装连续性），返回检查报告。
+      operationId: validateOutline
+      tags:
+        - Outline
+      responses:
+        '200':
+          description: 检查报告
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OutlineValidationReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/outline/confirm:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: 确认并锁定大纲
+      description: 锁定大纲（outline_locked = true），项目状态变更为 asset_prep。存在红色错误时拒绝锁定。
+      operationId: confirmOutline
+      tags:
+        - Outline
+      responses:
+        '200':
+          description: 确认成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OutlineData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/outline/episodes/{episodeNumber}/regenerate:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: episodeNumber
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    post:
+      summary: 重新生成单集
+      description: 仅重新生成指定集的内容，不影响大纲中其他集数据。
+      operationId: regenerateEpisode
+      tags:
+        - Outline
+      responses:
+        '200':
+          description: 重新生成后的单集
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RegenerateEpisodeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /projects/{projectId}/model-bindings:
     get:
       summary: 获取项目模型绑定
@@ -2161,6 +2344,234 @@ components:
         retryable:
           type: boolean
           description: 是否为可用性错误，可触发 fallback
+
+    # ── Outline Schemas ────────────────────────────────────────────
+
+    OutlineCharacter:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          description: 角色名
+        role_type:
+          type: string
+          enum:
+            - protagonist
+            - supporting
+            - antagonist
+          description: 角色定位（AI 生成时必填，前端更新时可省略）
+        description:
+          type: string
+          description: 角色描述
+
+    OutlineLocation:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          description: 场景名
+        description:
+          type: string
+          description: 场景描述
+
+    OutlineEpisode:
+      type: object
+      required:
+        - episode_number
+        - title
+        - summary
+        - key_events
+        - featured_characters
+        - featured_locations
+      properties:
+        episode_number:
+          type: integer
+          minimum: 1
+          description: 集号
+        title:
+          type: string
+          description: 集标题
+        summary:
+          type: string
+          description: 集摘要
+        key_events:
+          type: array
+          items:
+            type: string
+          description: 关键事件
+        featured_characters:
+          type: array
+          items:
+            type: string
+          description: 出场角色
+        featured_locations:
+          type: array
+          items:
+            type: string
+          description: 出场场景
+
+    OutlineData:
+      type: object
+      required:
+        - world_setting
+        - main_conflict
+        - characters
+        - locations
+        - episode_count
+        - episodes
+      properties:
+        world_setting:
+          type: string
+          description: 世界观设定
+        main_conflict:
+          type: string
+          description: 主要冲突
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutlineCharacter'
+          description: 角色列表
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutlineLocation'
+          description: 场景列表
+        episode_count:
+          type: integer
+          minimum: 1
+          description: 总集数
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutlineEpisode'
+          description: 分集大纲
+
+    UpdateOutlineRequest:
+      type: object
+      properties:
+        world_setting:
+          type: string
+          minLength: 1
+        main_conflict:
+          type: string
+          minLength: 1
+        characters:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OutlineCharacter'
+        locations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OutlineLocation'
+        episode_count:
+          type: integer
+          minimum: 1
+        episodes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OutlineEpisode'
+
+    OutlineSummary:
+      type: object
+      required:
+        - outline
+        - outline_locked
+        - project_status
+      properties:
+        outline:
+          oneOf:
+            - $ref: '#/components/schemas/OutlineData'
+            - type: 'null'
+          description: 大纲数据，未生成时为 null
+        outline_locked:
+          type: boolean
+          description: 大纲是否已锁定
+        project_status:
+          type: string
+          enum:
+            - draft
+            - outlining
+            - asset_prep
+            - producing
+            - completed
+          description: 项目状态
+
+    RegenerateEpisodeResponse:
+      type: object
+      required:
+        - episode
+        - episode_number
+      properties:
+        episode:
+          $ref: '#/components/schemas/OutlineEpisode'
+          description: 重新生成的单集数据
+        episode_number:
+          type: integer
+          minimum: 1
+          description: 集号
+
+    CheckSeverity:
+      type: string
+      enum:
+        - error
+        - warning
+        - pass
+      description: 检查结果严重度
+
+    CheckItem:
+      type: object
+      required:
+        - severity
+        - type
+        - message
+      properties:
+        severity:
+          $ref: '#/components/schemas/CheckSeverity'
+        type:
+          type: string
+          description: 检查项名称（如 角色位置矛盾、道具状态追踪、情绪曲线合理性、服装连续性、整体一致性）
+        message:
+          type: string
+          description: 检查结果描述
+        details:
+          type: string
+          description: 详细说明
+
+    OutlineValidationReport:
+      type: object
+      required:
+        - errors
+        - warnings
+        - passes
+        - passed
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckItem'
+          description: 红色错误列表
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckItem'
+          description: 黄色警告列表
+        passes:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckItem'
+          description: 绿色通过列表
+        passed:
+          type: boolean
+          description: 整体是否通过（无红色错误）
 
   responses:
     BadRequest:

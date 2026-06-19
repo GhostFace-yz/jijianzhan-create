@@ -2,6 +2,7 @@ import express from 'express';
 import { ZodError } from 'zod';
 import { AdapterPool } from './adapters/pool.js';
 import { MockImageAdapter } from './adapters/providers/mock/mock-image-adapter.js';
+import { MockTextAdapter } from './adapters/providers/mock/mock-text-adapter.js';
 import { createSnapshotService } from './services/snapshot/snapshot-service.js';
 import { createChangePropagationService } from './services/snapshot/propagation.js';
 import { createSnapshotRouter } from './routes/snapshots.js';
@@ -11,6 +12,8 @@ import { createCharacterService } from './services/character/character-service.j
 import { createCharacterRouter } from './routes/characters.js';
 import { createSceneBibleService } from './services/scene-bible/scene-bible-service.js';
 import { createLocationRouter } from './routes/locations.js';
+import { createOutlineService } from './services/outline/outline-service.js';
+import { createOutlineRouter } from './routes/outline.js';
 
 export function createApp() {
   const app = express();
@@ -19,6 +22,7 @@ export function createApp() {
 
   const adapterPool = new AdapterPool();
   adapterPool.registerImage(new MockImageAdapter());
+  adapterPool.registerText(new MockTextAdapter());
 
   const propagationService = createChangePropagationService();
   const snapshotService = createSnapshotService({
@@ -33,10 +37,15 @@ export function createApp() {
     snapshotService,
     adapterPool,
   });
+  const outlineService = createOutlineService({
+    snapshotService,
+    adapterPool,
+  });
 
   app.use('/api/v1/projects', createProjectRouter(projectService));
   app.use('/api/v1/projects/:projectId/characters', createCharacterRouter(characterService));
   app.use('/api/v1/projects/:projectId/locations', createLocationRouter(sceneBibleService));
+  app.use('/api/v1/projects/:projectId/outline', createOutlineRouter(outlineService));
   app.use(
     '/api/v1/projects/:projectId/entities/:entityType/:entityId/versions',
     createSnapshotRouter(snapshotService)
