@@ -126,6 +126,83 @@ export interface ProjectResponse {
   data: Project;
 }
 
+// ── Outline (YZ-40) ──
+
+export interface OutlineCharacter {
+  name: string;
+  description: string;
+}
+
+export interface OutlineLocation {
+  name: string;
+  description: string;
+}
+
+export interface OutlineEpisode {
+  episode_number: number;
+  title: string;
+  summary: string;
+  key_events: string[];
+  featured_characters: string[];
+  featured_locations: string[];
+}
+
+export interface OutlineData {
+  world_setting: string;
+  main_conflict: string;
+  characters: OutlineCharacter[];
+  locations: OutlineLocation[];
+  episode_count: number;
+  episodes: OutlineEpisode[];
+}
+
+export type ValidationSeverity = 'error' | 'warning' | 'pass';
+
+export interface ValidationItem {
+  type: string;
+  severity: ValidationSeverity;
+  message: string;
+  details?: string;
+}
+
+export interface ValidationReport {
+  errors: ValidationItem[];
+  warnings: ValidationItem[];
+  passes: ValidationItem[];
+  passed: boolean;
+}
+
+export interface OutlineResponse {
+  data: OutlineData;
+}
+
+export interface OutlineSummaryResponse {
+  data: {
+    outline: OutlineData | null;
+    outline_locked: boolean;
+    project_status: ProjectStatus;
+  };
+}
+
+export interface ValidationReportResponse {
+  data: ValidationReport;
+}
+
+export interface UpdateOutlineInput {
+  world_setting?: string;
+  main_conflict?: string;
+  characters?: OutlineCharacter[];
+  locations?: OutlineLocation[];
+  episodes?: OutlineEpisode[];
+}
+
+export interface RegenerateEpisodeResponse {
+  data: {
+    episode: OutlineEpisode;
+    episode_number: number;
+  };
+}
+
 export type CharacterRoleType = 'protagonist' | 'supporting' | 'antagonist';
 
 export type CharacterStatus = 'draft' | 'confirmed';
