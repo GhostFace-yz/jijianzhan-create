@@ -65,6 +65,31 @@ export function createLocationRouter(service: SceneBibleService): Router {
     }
   });
 
+  router.post('/sync-from-outline', async (req, res, next) => {
+    try {
+      const result = await service.syncScenesFromOutline(routeParams(req).projectId);
+      res.json({ data: result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/:locId', async (req, res, next) => {
+    try {
+      const location = await service.getScene(
+        routeParams(req).projectId,
+        routeParams(req).locId
+      );
+      if (!location) {
+        res.status(404).json({ error: { message: 'Location not found' } });
+        return;
+      }
+      res.json({ data: location });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.put('/:locId', async (req, res, next) => {
     try {
       const body = updateLocationBodySchema.parse(req.body);

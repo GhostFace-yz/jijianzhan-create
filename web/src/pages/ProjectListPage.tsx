@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { Plus, Search, Filter, ArrowUpDown, FileText } from 'lucide-react';
+import { Plus, Search, Filter, ArrowUpDown, FileText, MapPin, Users } from 'lucide-react';
 import { listProjects } from '../api/projects';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -128,15 +128,17 @@ export function ProjectListPage() {
             <p className="mb-4 text-sm text-slate">共 {total} 个项目</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => (
-                <Link
+                <div
                   key={project.id}
-                  to={`/projects/${project.id}`}
                   className="group rounded-xl border border-hairline bg-canvas p-5 shadow-sm transition-shadow hover:shadow-md"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <h3 className="line-clamp-1 text-lg font-semibold text-ink group-hover:text-primary">
+                    <Link
+                      to={`/projects/${project.id}/locations`}
+                      className="line-clamp-1 text-lg font-semibold text-ink hover:text-primary"
+                    >
                       {project.meta.title}
-                    </h3>
+                    </Link>
                     <Badge variant="purple">{PROJECT_STATUS_LABELS[project.status]}</Badge>
                   </div>
 
@@ -156,11 +158,24 @@ export function ProjectListPage() {
                     ) : null}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between text-xs text-steel">
-                    <span>{project.meta.style_tags.length > 0 ? project.meta.style_tags.join(' · ') : '无风格标签'}</span>
-                    <span>{formatDate(project.updated_at)}</span>
+                  <div className="mt-4 flex items-center gap-3 border-t border-hairline-soft pt-3">
+                    <Link
+                      to={`/projects/${project.id}/locations`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-steel hover:text-primary"
+                    >
+                      <MapPin className="h-3.5 w-3.5" />
+                      场景圣经
+                    </Link>
+                    <Link
+                      to={`/projects/${project.id}/characters`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-steel hover:text-primary"
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      角色圣经
+                    </Link>
+                    <span className="ml-auto text-xs text-steel">{formatDate(project.updated_at)}</span>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           </>

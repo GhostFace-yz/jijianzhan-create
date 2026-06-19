@@ -40,6 +40,25 @@ export async function listLocations(projectId: string): Promise<LocationListResp
   return request<LocationListResponse>(`/projects/${projectId}/locations`);
 }
 
+export async function syncFromOutline(projectId: string): Promise<LocationListResponse> {
+  return request<LocationListResponse>(
+    `/projects/${projectId}/locations/sync-from-outline`,
+    { method: 'POST' }
+  );
+}
+
+export async function getLocation(
+  projectId: string,
+  locationId: string
+): Promise<LocationResponse> {
+  const list = await listLocations(projectId);
+  const loc = list.data.locations.find((l) => l.id === locationId);
+  if (!loc) {
+    throw new Error(`Location ${locationId} not found`);
+  }
+  return { data: loc };
+}
+
 export async function updateLocation(
   projectId: string,
   locationId: string,
