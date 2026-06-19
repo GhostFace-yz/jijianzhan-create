@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import path from 'node:path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -20,6 +21,6 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     include: ['tests/**/*.{test,spec}.{ts,tsx}'],
-    setupFiles: ['./tests/setup.ts'],
+    setupFiles: [path.resolve(__dirname, 'tests', 'setup.ts')],
   },
 });
