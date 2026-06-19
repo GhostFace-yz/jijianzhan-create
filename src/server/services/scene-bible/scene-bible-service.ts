@@ -96,14 +96,14 @@ export function createSceneBibleService(
   }
 
   async function ensureProjectExists(projectId: string): Promise<void> {
-    const project = await db.project.findUnique({ where: { id: projectId } });
+    const project = await db.projects.findUnique({ where: { id: projectId } });
     if (!project) {
       throw new Error('Project not found');
     }
   }
 
   async function ensureLocation(projectId: string, locId: string): Promise<Location> {
-    const location = await db.location.findUnique({ where: { id: locId } });
+    const location = await db.locations.findUnique({ where: { id: locId } });
     if (!location || location.project_id !== projectId) {
       throw new Error('Location not found');
     }
@@ -192,7 +192,7 @@ export function createSceneBibleService(
   return {
     async syncScenesFromOutline(projectId: string): Promise<Location[]> {
       await ensureProjectExists(projectId);
-      const project = await db.project.findUnique({ where: { id: projectId } });
+      const project = await db.projects.findUnique({ where: { id: projectId } });
       const meta = (project?.meta ?? {}) as Record<string, unknown>;
       const rawLocations = meta.locations;
 
@@ -220,13 +220,13 @@ export function createSceneBibleService(
 
       const results: Location[] = [];
       for (const item of outlineLocations) {
-        const existing = await db.location.findFirst({
+        const existing = await db.locations.findFirst({
           where: { project_id: projectId, name: item.name },
         });
 
         let location: Location;
         if (existing) {
-          location = await db.location.update({
+          location = await db.locations.update({
             where: { id: existing.id },
             data: {
               description: item.description ?? existing.description,
@@ -238,7 +238,7 @@ export function createSceneBibleService(
             ...normalizeInput(item),
             project_id: projectId,
           };
-          location = await db.location.create({ data });
+          location = await db.locations.create({ data });
         }
 
         await snapshotLocation(location, 'ai_generated');
@@ -252,8 +252,8 @@ export function createSceneBibleService(
       await ensureProjectExists(projectId);
       const where: Prisma.LocationWhereInput = { project_id: projectId };
       const [total, locations] = await Promise.all([
-        db.location.count({ where }),
-        db.location.findMany({
+        db.locations.count({ where }),
+        db.locations.findMany({
           where,
           orderBy: { updated_at: 'desc' },
         }),
@@ -263,7 +263,7 @@ export function createSceneBibleService(
 
     async getScene(projectId: string, locId: string): Promise<Location | null> {
       await ensureProjectExists(projectId);
-      const location = await db.location.findUnique({ where: { id: locId } });
+      const location = await db.locations.findUnique({ where: { id: locId } });
       if (!location || location.project_id !== projectId) {
         return null;
       }
@@ -277,7 +277,7 @@ export function createSceneBibleService(
         project_id: projectId,
         key_props: (input.key_props ?? []) as unknown as Prisma.InputJsonValue,
       };
-      const location = await db.location.create({ data });
+      const location = await db.locations.create({ data });
       await snapshotLocation(location, 'user_edited');
       return location;
     },
@@ -305,7 +305,7 @@ export function createSceneBibleService(
       }
       if (input.status !== undefined) data.status = input.status;
 
-      const location = await db.location.update({ where: { id: locId }, data });
+      const location = await db.locations.update({ where: { id: locId }, data });
       await snapshotLocation(location, 'user_edited');
       return location;
     },
@@ -343,7 +343,7 @@ export function createSceneBibleService(
       await ensureProjectExists(projectId);
       await ensureLocation(projectId, locId);
 
-      const location = await db.location.update({
+      const location = await db.locations.update({
         where: { id: locId },
         data: {
           base_seed: candidate.seed,
@@ -403,7 +403,7 @@ export function createSceneBibleService(
         } as SceneVariant,
       };
 
-      const updated = await db.location.update({
+      const updated = await db.locations.update({
         where: { id: locId },
         data: {
           variants: nextVariants as unknown as Prisma.InputJsonValue,
@@ -486,7 +486,7 @@ export function createSceneBibleService(
         updated_at: new Date(),
       };
 
-      const location = await db.location.update({ where: { id: locId }, data });
+      const location = await db.locations.update({ where: { id: locId }, data });
       return location;
     },
   };

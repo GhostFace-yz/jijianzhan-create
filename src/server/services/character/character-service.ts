@@ -77,14 +77,14 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
   }
 
   async function ensureProjectExists(projectId: string): Promise<void> {
-    const project = await db.project.findUnique({ where: { id: projectId } });
+    const project = await db.projects.findUnique({ where: { id: projectId } });
     if (!project) {
       throw new Error('Project not found');
     }
   }
 
   async function ensureCharacter(projectId: string, charId: string): Promise<Character> {
-    const character = await db.character.findUnique({ where: { id: charId } });
+    const character = await db.characters.findUnique({ where: { id: charId } });
     if (!character || character.project_id !== projectId) {
       throw new Error('Character not found');
     }
@@ -210,8 +210,8 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       await ensureProjectExists(projectId);
       const where: Prisma.CharacterWhereInput = { project_id: projectId };
       const [total, characters] = await Promise.all([
-        db.character.count({ where }),
-        db.character.findMany({
+        db.characters.count({ where }),
+        db.characters.findMany({
           where,
           orderBy: { updated_at: 'desc' },
         }),
@@ -226,14 +226,14 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         project_id: projectId,
         ref_images: [] as unknown as Prisma.InputJsonValue,
       };
-      const character = await db.character.create({ data });
+      const character = await db.characters.create({ data });
       await snapshotCharacter(character, 'user_edited');
       return character;
     },
 
     async getCharacter(projectId: string, charId: string) {
       await ensureProjectExists(projectId);
-      const character = await db.character.findUnique({ where: { id: charId } });
+      const character = await db.characters.findUnique({ where: { id: charId } });
       if (!character || character.project_id !== projectId) {
         return null;
       }
@@ -256,7 +256,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       if (input.voice_description !== undefined) data.voice_description = input.voice_description;
       if (input.status !== undefined) data.status = input.status;
 
-      const character = await db.character.update({ where: { id: charId }, data });
+      const character = await db.characters.update({ where: { id: charId }, data });
       await snapshotCharacter(character, 'user_edited');
       return character;
     },
@@ -265,14 +265,14 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       await ensureProjectExists(projectId);
       await ensureCharacter(projectId, charId);
       if (snapshotService) {
-        await db.versionSnapshot.deleteMany({
+        await db.version_snapshots.deleteMany({
           where: {
             project_id: projectId,
             entity_type: 'character',
             entity_id: charId,
           },
         });
-        await db.versionCounter.deleteMany({
+        await db.version_counters.deleteMany({
           where: {
             project_id: projectId,
             entity_type: 'character',
@@ -280,7 +280,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
           },
         });
       }
-      await db.character.delete({ where: { id: charId } });
+      await db.characters.delete({ where: { id: charId } });
     },
 
     async autoCreateCharacters(projectId: string, outlineCharacters: OutlineCharacterInput[]) {
@@ -292,7 +292,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
           project_id: projectId,
           ref_images: [] as unknown as Prisma.InputJsonValue,
         };
-        const character = await db.character.create({ data });
+        const character = await db.characters.create({ data });
         await snapshotCharacter(character, 'ai_generated');
         created.push(character);
       }
@@ -312,7 +312,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         })
       );
 
-      const characterUpdated = await db.character.update({
+      const characterUpdated = await db.characters.update({
         where: { id: charId },
         data: {
           ref_images: [...refImages, ...generated] as unknown as Prisma.InputJsonValue,
@@ -336,7 +336,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       const nextRefImages = refImages.filter((img) => img.view !== viewId);
       nextRefImages.push(regenerated);
 
-      const characterUpdated = await db.character.update({
+      const characterUpdated = await db.characters.update({
         where: { id: charId },
         data: {
           ref_images: nextRefImages as unknown as Prisma.InputJsonValue,
@@ -359,7 +359,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         throw new Error(`Missing views: ${missing.join(', ')}`);
       }
 
-      const confirmed = await db.character.update({
+      const confirmed = await db.characters.update({
         where: { id: charId },
         data: {
           status: 'confirmed',
@@ -398,7 +398,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         })
       );
 
-      const characterUpdated = await db.character.update({
+      const characterUpdated = await db.characters.update({
         where: { id: charId },
         data: {
           ref_images: [...refImages, ...expressions, ...scenes] as unknown as Prisma.InputJsonValue,
@@ -446,7 +446,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         updated_at: new Date(),
       };
 
-      const character = await db.character.update({ where: { id: charId }, data });
+      const character = await db.characters.update({ where: { id: charId }, data });
       return character;
     },
   };

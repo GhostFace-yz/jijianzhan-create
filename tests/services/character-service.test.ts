@@ -19,7 +19,7 @@ function createTestServices() {
 }
 
 async function createTestProject() {
-  return testPrisma.project.create({
+  return testPrisma.projects.create({
     data: {
       user_id: 'system',
       status: 'draft',

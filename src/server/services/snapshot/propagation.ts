@@ -35,7 +35,7 @@ export function createChangePropagationService(
 
   return {
     async markDownstreamForReview(payload: ChangePropagationPayload): Promise<void> {
-      await db.downstreamReviewFlag.create({
+      await db.downstream_review_flags.create({
         data: {
           project_id: payload.entity.projectId,
           source_entity_type: payload.entity.entityType,

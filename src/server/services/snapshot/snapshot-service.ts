@@ -101,7 +101,7 @@ export function createSnapshotService(options: SnapshotServiceOptions = {}): Sna
     versionNumber: number
   ): Promise<{ versionNumber: number; content: Record<string, unknown> } | null> {
     if (versionNumber <= 1) return null;
-    const row = await db.versionSnapshot.findFirst({
+    const row = await db.version_snapshots.findFirst({
       where: {
         project_id: entity.projectId,
         entity_type: entity.entityType,
@@ -123,7 +123,7 @@ export function createSnapshotService(options: SnapshotServiceOptions = {}): Sna
       const parent = await getParentSnapshot(input.entity, nextVersionNumber);
       const diff = parent ? computeDiff(parent.content, input.content) : {};
 
-      const row = await db.versionSnapshot.create({
+      const row = await db.version_snapshots.create({
         data: {
           project_id: input.entity.projectId,
           entity_type: input.entity.entityType,
@@ -151,8 +151,8 @@ export function createSnapshotService(options: SnapshotServiceOptions = {}): Sna
       };
 
       const [total, rows] = await Promise.all([
-        db.versionSnapshot.count({ where }),
-        db.versionSnapshot.findMany({
+        db.version_snapshots.count({ where }),
+        db.version_snapshots.findMany({
           where,
           orderBy: { version_number: 'desc' },
           skip: pagination?.offset ?? 0,
@@ -178,7 +178,7 @@ export function createSnapshotService(options: SnapshotServiceOptions = {}): Sna
     },
 
     async getSnapshot(entity: EntityRef, versionId: string): Promise<Snapshot | null> {
-      const row = await db.versionSnapshot.findFirst({
+      const row = await db.version_snapshots.findFirst({
         where: {
           project_id: entity.projectId,
           entity_type: entity.entityType,

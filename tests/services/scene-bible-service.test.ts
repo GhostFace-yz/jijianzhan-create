@@ -23,7 +23,7 @@ function createTestServices() {
 }
 
 async function createTestProject(meta: Record<string, unknown> = {}) {
-  return testPrisma.project.create({
+  return testPrisma.projects.create({
     data: {
       user_id: 'system',
       status: 'draft',
@@ -70,7 +70,7 @@ describe('SceneBibleService', () => {
     });
     await service.syncScenesFromOutline(project.id);
 
-    await testPrisma.project.update({
+    await testPrisma.projects.update({
       where: { id: project.id },
       data: {
         meta: { title: 'Test Project', locations: [{ name: 'Cafe', description: 'New description' }] } as never,
