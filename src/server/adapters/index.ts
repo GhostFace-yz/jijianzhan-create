@@ -1,6 +1,7 @@
 import { AdapterPool } from './pool.js';
 import { MockImageAdapter } from './providers/mock/mock-image-adapter.js';
 import { MockMusicAdapter } from './providers/mock/mock-music-adapter.js';
+import { MockRenderAdapter } from './providers/mock/mock-render-adapter.js';
 import { MockTTSAdapter } from './providers/mock/mock-tts-adapter.js';
 import { MockTextAdapter } from './providers/mock/mock-text-adapter.js';
 import { MockVideoAdapter } from './providers/mock/mock-video-adapter.js';
@@ -15,6 +16,7 @@ export function registerAdapters(pool: AdapterPool): AdapterPool {
   pool.registerVideo(new MockVideoAdapter());
   pool.registerTTS(new MockTTSAdapter());
   pool.registerMusic(new MockMusicAdapter());
+  pool.registerRender(new MockRenderAdapter());
   return pool;
 }
 

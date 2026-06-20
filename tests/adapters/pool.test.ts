@@ -58,6 +58,7 @@ describe('AdapterPool', () => {
       video: {},
       tts: {},
       music: {},
+      render: {},
     });
   });
 

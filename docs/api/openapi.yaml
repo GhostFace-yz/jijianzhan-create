@@ -1406,8 +1406,1080 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /projects/{projectId}/episodes/{epId}/audio/music:
+    get:
+      summary: 获取当前配乐
+      description: 返回指定集已生成或已上传的配乐数据；未生成时返回 404。
+      operationId: getEpisodeMusic
+      tags:
+        - Music
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+          description: 集标识，格式 ep-{number}
+      responses:
+        '200':
+          description: 配乐数据
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EpisodeMusicResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/audio/music/generate:
+    post:
+      summary: 生成全集配乐
+      description: |
+        根据分镜节点的 music_mood 提取情绪序列，调用音乐 Adapter 生成整集背景音乐，
+        按节点 duration_target 切割为分段，自动应用 Duck（有台词节点压低音量），
+        检测相邻节点情绪差异过大时返回警告。
+      operationId: generateEpisodeMusic
+      tags:
+        - Music
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+          description: 集标识，格式 ep-{number}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  maxLength: 100
+                  description: 音乐 Adapter provider ID
+                style_tags:
+                  type: array
+                  maxItems: 20
+                  items:
+                    type: string
+                    maxLength: 50
+                  description: 题材风格标签（覆盖项目 meta 中的 style_tags）
+                crossfade_duration:
+                  type: number
+                  minimum: 0.1
+                  maximum: 1.0
+                  default: 0.4
+                  description: 交叉淡化时长（秒）
+      responses:
+        '201':
+          description: 配乐生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EpisodeMusicResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/audio/music/upload:
+    put:
+      summary: 手动上传配乐
+      description: 上传自定义背景音乐文件，不进行切割和情绪分析。
+      operationId: uploadEpisodeMusic
+      tags:
+        - Music
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+          description: 集标识，格式 ep-{number}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+                - duration
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: 配乐文件 URL（http/https）
+                duration:
+                  type: number
+                  exclusiveMinimum: 0
+                  description: 配乐时长（秒）
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EpisodeMusicResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/audio/tts/generate:
+    post:
+      summary: 批量生成配音
+      description: 为整集所有带台词的分镜节点生成 TTS 配音。
+      operationId: generateBatchTts
+      tags:
+        - TTS
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+          description: 集标识，格式 ep-{number}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TtsGenerateOptions'
+      responses:
+        '201':
+          description: 配音批量生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TtsBatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/audio/tts/nodes/{nodeId}/generate:
+    post:
+      summary: 生成单个节点配音
+      description: 为指定分镜节点生成 TTS 配音；无台词节点返回 skipped=true。
+      operationId: generateNodeTts
+      tags:
+        - TTS
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TtsGenerateOptions'
+      responses:
+        '201':
+          description: 节点配音生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TtsNodeResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/audio/tts/nodes/{nodeId}/review:
+    put:
+      summary: 审核节点配音
+      description: 对已经生成的节点配音进行通过 / 驳回审核。
+      operationId: reviewNodeTts
+      tags:
+        - TTS
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TtsReviewInput'
+      responses:
+        '200':
+          description: 审核成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AudioClip'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/audio/tts/nodes/{nodeId}/upload:
+    put:
+      summary: 手动上传录音替换 AI 配音
+      description: 使用用户上传的录音文件替换节点已有的 AI 配音。
+      operationId: uploadNodeTts
+      tags:
+        - TTS
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TtsUploadInput'
+      responses:
+        '200':
+          description: 上传替换成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AudioClip'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/video/generate:
+    post:
+      summary: 批量生成视频片段
+      description: |
+        为整集所有分镜节点生成 5-8 秒视频片段。
+        输入包括分镜首帧图、角色 IP-Adapter/参考图、场景参考图、运镜指令与动作描述。
+        支持主模型失败时自动切换 fallback provider，并对每个片段执行时长、人脸崩坏、动作跳变质量检测。
+      operationId: generateBatchVideo
+      tags:
+        - Video
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+          description: 集标识，格式 ep-{number}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoGenerateOptions'
+      responses:
+        '201':
+          description: 视频批量生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VideoBatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/video/nodes/{nodeId}/generate:
+    post:
+      summary: 生成单个节点视频片段
+      description: 为指定分镜节点生成视频片段。
+      operationId: generateNodeVideo
+      tags:
+        - Video
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoGenerateOptions'
+      responses:
+        '201':
+          description: 节点视频生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VideoNodeResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/video/nodes/{nodeId}/review:
+    put:
+      summary: 审核节点视频片段
+      description: 对已经生成的节点视频片段进行通过 / 驳回审核。
+      operationId: reviewNodeVideo
+      tags:
+        - Video
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoReviewInput'
+      responses:
+        '200':
+          description: 审核成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VideoClip'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/video/nodes/{nodeId}/upload:
+    put:
+      summary: 手动上传节点视频片段
+      description: |
+        用用户提供的视频 URL 替换指定分镜节点的 video_clip。
+        上传后片段状态为 generated，可继续走审核流程。
+      operationId: uploadNodeVideo
+      tags:
+        - Video
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoUploadInput'
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VideoClip'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: 上传节点视频片段文件
+      description: |
+        直接上传视频文件替换指定分镜节点的 video_clip。
+        文件会写入存储服务并返回可访问 URL；未提供 duration 时使用节点的 duration_target。
+        上传后片段状态为 generated，可继续走审核流程。
+      operationId: uploadNodeVideoFile
+      tags:
+        - Video
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: epId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^ep-\d+$'
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - video
+              properties:
+                video:
+                  type: string
+                  format: binary
+                  description: 视频文件（video/*）
+                duration:
+                  type: number
+                  minimum: 0.1
+                  description: 上传视频片段时长（秒），未提供时使用节点 duration_target
+                camera_move:
+                  type: string
+                  maxLength: 100
+                  description: 可选：覆盖节点默认运镜指令
+                motion_description:
+                  type: string
+                  maxLength: 2000
+                  description: 可选：覆盖节点默认动作描述
+      responses:
+        '201':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/VideoClip'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/render:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: epId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ep-\d+$'
+        description: 集标识，格式 ep-{number}
+    post:
+      summary: 开始合成输出
+      description: |
+        将本集所有已生成的视频片段按时间轴拼接，应用转场，混合配音与配乐，添加字幕并编码为 MP4。
+        需要前置完成：分镜节点拆分、TTS 配音生成、配乐生成、视频片段生成。
+
+        真实渲染模式下，任务会异步入队并立即返回 `queued` 状态与 `job_id`，由独立 Worker 消费执行；
+        降级/测试模式下可能同步完成并返回 `completed`。
+      operationId: startRender
+      tags:
+        - Render
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenderOptions'
+      responses:
+        '202':
+          description: 合成任务已入队，等待 Worker 执行
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EpisodeRenderOutput'
+        '201':
+          description: 合成任务已同步完成（降级/测试模式）
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EpisodeRenderOutput'
+
+  /projects/{projectId}/episodes/{epId}/render/progress:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: epId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ep-\d+$'
+        description: 集标识，格式 ep-{number}
+    get:
+      summary: 查询合成进度
+      description: 返回指定剧集的合成状态、进度百分比与输出信息。
+      operationId: getRenderProgress
+      tags:
+        - Render
+      responses:
+        '200':
+          description: 合成进度
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    $ref: '#/components/schemas/EpisodeRenderOutput'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{projectId}/episodes/{epId}/render/download:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: epId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^ep-\d+$'
+        description: 集标识，格式 ep-{number}
+    get:
+      summary: 下载最终 MP4
+      description: 合成完成后返回最终 MP4 下载链接。
+      operationId: getRenderDownload
+      tags:
+        - Render
+      responses:
+        '200':
+          description: 下载链接
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                properties:
+                  data:
+                    type: object
+                    required:
+                      - url
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   schemas:
+    AudioClip:
+      type: object
+      required:
+        - url
+        - duration
+        - voice_id
+        - emotion
+        - speed
+        - generated_at
+        - status
+      properties:
+        url:
+          type: string
+          format: uri
+        duration:
+          type: number
+        voice_id:
+          type: string
+        emotion:
+          type: string
+        speed:
+          type: number
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - pending
+            - generated
+            - reviewed
+        reviewed_at:
+          type: string
+          format: date-time
+        review_comment:
+          type: string
+        reviewed:
+          type: boolean
+
+    TtsGenerateOptions:
+      type: object
+      properties:
+        speed:
+          type: number
+          minimum: 0.8
+          maximum: 1.2
+        emotion:
+          type: string
+          maxLength: 50
+        voice_id:
+          type: string
+          maxLength: 100
+        force:
+          type: boolean
+        provider:
+          type: string
+          maxLength: 50
+
+    TtsReviewInput:
+      type: object
+      required:
+        - approved
+      properties:
+        approved:
+          type: boolean
+        comment:
+          type: string
+          maxLength: 500
+
+    TtsUploadInput:
+      type: object
+      required:
+        - url
+        - duration
+      properties:
+        url:
+          type: string
+          format: uri
+        duration:
+          type: number
+          exclusiveMinimum: 0
+
+    TtsNodeResult:
+      type: object
+      required:
+        - node_id
+        - audio_clip
+        - skipped
+      properties:
+        node_id:
+          type: string
+        audio_clip:
+          $ref: '#/components/schemas/AudioClip'
+        skipped:
+          type: boolean
+        skip_reason:
+          type: string
+        error:
+          type: string
+
+    TtsBatchResult:
+      type: object
+      required:
+        - episode_id
+        - total_nodes
+        - nodes_with_dialogue
+        - nodes_generated
+        - nodes_skipped
+        - nodes_failed
+        - success_rate
+        - results
+      properties:
+        episode_id:
+          type: string
+        total_nodes:
+          type: integer
+        nodes_with_dialogue:
+          type: integer
+        nodes_generated:
+          type: integer
+        nodes_skipped:
+          type: integer
+        nodes_failed:
+          type: integer
+        success_rate:
+          type: number
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TtsNodeResult'
+
+
+    VideoClip:
+      type: object
+      required:
+        - url
+        - duration
+        - camera_move
+        - motion_description
+        - generated_at
+        - status
+        - quality_report
+        - provider
+        - model
+        - fallback_used
+      properties:
+        url:
+          type: string
+          format: uri
+        duration:
+          type: number
+        camera_move:
+          type: string
+          description: 映射后的英文运镜指令
+        motion_description:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+            - pending
+            - generated
+            - reviewed
+        reviewed_at:
+          type: string
+          format: date-time
+        review_comment:
+          type: string
+        reviewed:
+          type: boolean
+        quality_report:
+          $ref: '#/components/schemas/QualityReport'
+        provider:
+          type: string
+        model:
+          type: string
+        fallback_used:
+          type: boolean
+
+    QualityReport:
+      type: object
+      required:
+        - actual_duration
+        - target_duration
+        - duration_ok
+        - face_corruption_detected
+        - motion_jump_detected
+        - passed
+        - details
+      properties:
+        actual_duration:
+          type: number
+        target_duration:
+          type: number
+        duration_ok:
+          type: boolean
+        face_corruption_detected:
+          type: boolean
+        motion_jump_detected:
+          type: boolean
+        passed:
+          type: boolean
+        details:
+          type: array
+          items:
+            type: string
+
+    VideoGenerateOptions:
+      type: object
+      properties:
+        provider:
+          type: string
+          maxLength: 50
+          description: 主视频 Adapter provider ID
+        fallback_provider:
+          type: string
+          maxLength: 50
+          description: fallback provider ID，默认 mock-video-fallback
+        force:
+          type: boolean
+          description: 是否强制重新生成
+        concurrency:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 3
+          description: in-process 队列并发数
+        duration:
+          type: number
+          minimum: 3
+          maximum: 15
+          description: 覆盖节点默认时长
+        face_enhancement:
+          type: boolean
+          description: 是否开启人脸增强
+
+    VideoReviewInput:
+      type: object
+      required:
+        - approved
+      properties:
+        approved:
+          type: boolean
+        comment:
+          type: string
+          maxLength: 500
+
+    VideoUploadInput:
+      type: object
+      required:
+        - url
+        - duration
+      properties:
+        url:
+          type: string
+          format: uri
+          description: 上传视频片段的可访问 URL
+        duration:
+          type: number
+          minimum: 0.1
+          description: 上传视频片段时长（秒）
+        camera_move:
+          type: string
+          maxLength: 100
+          description: 可选，覆盖节点默认运镜指令
+        motion_description:
+          type: string
+          maxLength: 2000
+          description: 可选，覆盖节点默认动作描述
+
+    VideoNodeResult:
+      type: object
+      required:
+        - node_id
+        - video_clip
+        - skipped
+      properties:
+        node_id:
+          type: string
+        video_clip:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/VideoClip'
+        skipped:
+          type: boolean
+        skip_reason:
+          type: string
+        error:
+          type: string
+
+    VideoBatchResult:
+      type: object
+      required:
+        - episode_id
+        - total_nodes
+        - nodes_generated
+        - nodes_skipped
+        - nodes_failed
+        - success_rate
+        - fallback_used_count
+        - quality_passed_count
+        - results
+      properties:
+        episode_id:
+          type: string
+        total_nodes:
+          type: integer
+        nodes_generated:
+          type: integer
+        nodes_skipped:
+          type: integer
+        nodes_failed:
+          type: integer
+        success_rate:
+          type: number
+        fallback_used_count:
+          type: integer
+        quality_passed_count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VideoNodeResult'
+
     ProjectStatus:
       type: string
       enum:
@@ -1589,6 +2661,7 @@ components:
             - video
             - tts
             - music
+            - render
           description: 任务类型
         primary:
           $ref: '#/components/schemas/ModelConfig'
@@ -1628,6 +2701,8 @@ components:
         tts:
           $ref: '#/components/schemas/ModelBinding'
         music:
+          $ref: '#/components/schemas/ModelBinding'
+        render:
           $ref: '#/components/schemas/ModelBinding'
 
     GenerationTaskRequest:
@@ -2572,6 +3647,233 @@ components:
         passed:
           type: boolean
           description: 整体是否通过（无红色错误）
+
+    MusicSegment:
+      type: object
+      properties:
+        node_id:
+          type: string
+        start_time:
+          type: number
+        duration:
+          type: number
+        url:
+          type: string
+          format: uri
+        volume:
+          type: number
+          minimum: 0
+          maximum: 1
+        ducked:
+          type: boolean
+        crossfade_in:
+          type: number
+        crossfade_out:
+          type: number
+
+    EmotionTransitionWarning:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - emotion_transition
+        from_node:
+          type: string
+        to_node:
+          type: string
+        from_mood:
+          type: string
+        to_mood:
+          type: string
+        message:
+          type: string
+
+    EpisodeMusicResult:
+      type: object
+      properties:
+        episode_id:
+          type: string
+        original_url:
+          type: string
+          format: uri
+        duration:
+          type: number
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MusicSegment'
+        generated_at:
+          type: string
+          format: date-time
+        provider:
+          type: string
+        model:
+          type: string
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmotionTransitionWarning'
+
+    RenderOptions:
+      type: object
+      properties:
+        provider:
+          type: string
+          maxLength: 50
+        resolution:
+          type: string
+          enum:
+            - 1080x1920
+            - 1920x1080
+        fps:
+          type: integer
+          enum:
+            - 24
+            - 30
+        codec:
+          type: string
+          enum:
+            - h264
+            - h265
+        subtitles_enabled:
+          type: boolean
+        subtitle_style:
+          type: string
+          enum:
+            - white_with_black_border
+            - white
+            - black
+        subtitle_position:
+          type: string
+          enum:
+            - bottom
+            - top
+        subtitle_size:
+          type: string
+          enum:
+            - small
+            - medium
+            - large
+        music_duck_dialogue:
+          type: number
+          minimum: 0.2
+          maximum: 0.4
+        music_duck_nondialogue:
+          type: number
+          minimum: 0.6
+          maximum: 0.9
+        strong_emotion_transition:
+          type: string
+          enum:
+            - white_flash
+            - black_fade
+
+    SubtitleCue:
+      type: object
+      required:
+        - start_time
+        - end_time
+        - text
+        - node_id
+      properties:
+        start_time:
+          type: number
+        end_time:
+          type: number
+        text:
+          type: string
+        node_id:
+          type: string
+
+    TransitionRecord:
+      type: object
+      required:
+        - from_node_id
+        - to_node_id
+        - transition_type
+        - duration
+      properties:
+        from_node_id:
+          type: string
+        to_node_id:
+          type: string
+        transition_type:
+          type: string
+          enum:
+            - cut
+            - dissolve
+            - fade
+            - white_flash
+            - black_fade
+        duration:
+          type: number
+
+    EpisodeRenderOutput:
+      type: object
+      required:
+        - episode_id
+        - status
+        - progress_percent
+        - subtitle_cues
+        - transitions
+        - started_at
+      properties:
+        episode_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - queued
+            - concatenating
+            - mixing
+            - burning_subtitles
+            - encoding
+            - completed
+            - failed
+        progress_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        output_url:
+          type: string
+          format: uri
+          nullable: true
+        output_duration:
+          type: number
+          nullable: true
+        resolution:
+          type: string
+        fps:
+          type: integer
+        codec:
+          type: string
+        subtitle_cues:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubtitleCue'
+        transitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitionRecord'
+        started_at:
+          type: string
+          format: date-time
+        queued_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        job_id:
+          type: string
+          nullable: true
 
   responses:
     BadRequest:

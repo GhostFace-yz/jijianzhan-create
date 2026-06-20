@@ -6,9 +6,9 @@ import type { ZodSchema } from 'zod';
 export type HealthStatus = 'available' | 'degraded' | 'unavailable';
 
 /**
- * 任务类型：五类 AI 生成任务
+ * 任务类型：六类 AI 生成任务（增加 render 合成输出）
  */
-export type TaskType = 'text' | 'image' | 'video' | 'tts' | 'music';
+export type TaskType = 'text' | 'image' | 'video' | 'tts' | 'music' | 'render';
 
 /**
  * Token 用量（文本生成）
@@ -50,6 +50,16 @@ export interface MusicUsage {
 }
 
 /**
+ * 合成输出用量
+ */
+export interface RenderUsage {
+  credits: number;
+  durationSec: number;
+  cpuCoreSeconds: number; // CPU 核·秒
+  outputFileSizeBytes: number; // 输出文件大小
+}
+
+/**
  * 任务类型到用量类型的映射
  */
 export type UsageForTask<T extends TaskType> = T extends 'text'
@@ -60,7 +70,9 @@ export type UsageForTask<T extends TaskType> = T extends 'text'
       ? VideoUsage
       : T extends 'tts'
         ? TTSUsage
-        : MusicUsage;
+        : T extends 'music'
+          ? MusicUsage
+          : RenderUsage;
 
 /**
  * 统一结果包装
@@ -109,6 +121,7 @@ export interface ProjectModelBindings {
   video_fallback: ModelBinding<'video'>;
   tts: ModelBinding<'tts'>;
   music: ModelBinding<'music'>;
+  render: ModelBinding<'render'>;
 }
 
 /**
@@ -148,6 +161,76 @@ export interface TTSResult {
 export interface MusicResult {
   url: string;
   duration: number;
+}
+
+/**
+ * 合成输出结果
+ */
+export interface RenderResult {
+  url: string;
+  duration: number;
+  resolution: string;
+  fps: number;
+  codec: string;
+}
+
+/**
+ * 合成任务转场描述
+ */
+export interface RenderTransition {
+  from_node_id: string;
+  to_node_id: string;
+  transition_type: 'cut' | 'dissolve' | 'fade' | 'white_flash' | 'black_fade';
+  duration: number;
+}
+
+/**
+ * 字幕 cue
+ */
+export interface RenderSubtitleCue {
+  start_time: number;
+  end_time: number;
+  text: string;
+  node_id: string;
+}
+
+/**
+ * 音乐混音片段
+ */
+export interface RenderMixTrack {
+  url: string;
+  start_time: number;
+  duration: number;
+  volume: number;
+}
+
+/**
+ * 合成 Adapter 接口
+ */
+export interface AIRenderAdapter {
+  readonly provider: string;
+  healthCheck(): Promise<HealthStatus>;
+  composeEpisode(
+    params: {
+      videoClips: Array<{
+        url: string;
+        duration: number;
+        freezeExtend?: number;
+      }>;
+      audioClips: Array<{
+        url: string;
+        duration: number;
+        startTime: number;
+      }>;
+      musicSegments: RenderMixTrack[];
+      transitions: RenderTransition[];
+      subtitleCues: RenderSubtitleCue[];
+      resolution: string;
+      fps: number;
+      codec: string;
+    },
+    config: ModelConfig,
+  ): Promise<AdapterResult<RenderResult, RenderUsage>>;
 }
 
 /**
@@ -247,12 +330,13 @@ export interface AdapterForTask {
   video: AIVideoAdapter;
   tts: AITTSAdapter;
   music: AIMusicAdapter;
+  render: AIRenderAdapter;
 }
 
 /**
  * Adapter 统一接口联合类型
  */
-export type AIAdapter = AITextAdapter | AIImageAdapter | AIVideoAdapter | AITTSAdapter | AIMusicAdapter;
+export type AIAdapter = AITextAdapter | AIImageAdapter | AIVideoAdapter | AITTSAdapter | AIMusicAdapter | AIRenderAdapter;
 
 /**
  * Adapter 执行函数签名（用于 FallbackRouter）

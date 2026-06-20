@@ -58,7 +58,7 @@ model locations {
   status        String   @default("draft")
   base_seed     Int?
   base_image_url String?
-  variants      Json
+  variants      Json    @default("[]")
   created_at    DateTime @default(now())
   updated_at    DateTime @default(now())
 
@@ -73,6 +73,9 @@ model projects {
   meta           Json
   outline        Json?
   outline_locked Boolean  @default(false)
+  storyboard_nodes Json?
+  music            Json?
+  render_output    Json?
   created_at     DateTime @default(now())
   updated_at     DateTime @default(now())
 

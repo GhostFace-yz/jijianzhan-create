@@ -4,6 +4,7 @@ import type {
   AIVideoAdapter,
   AITTSAdapter,
   AIMusicAdapter,
+  AIRenderAdapter,
   AdapterForTask,
   HealthStatus,
   TaskType,
@@ -19,12 +20,14 @@ export class AdapterPool {
   private videoAdapters = new Map<string, AIVideoAdapter>();
   private ttsAdapters = new Map<string, AITTSAdapter>();
   private musicAdapters = new Map<string, AIMusicAdapter>();
+  private renderAdapters = new Map<string, AIRenderAdapter>();
   private healthStatus: HealthReport = {
     text: {},
     image: {},
     video: {},
     tts: {},
     music: {},
+    render: {},
   };
 
   private adapterMapForTask<T extends TaskType>(taskType: T): Map<string, AdapterForTask[T]> {
@@ -39,6 +42,8 @@ export class AdapterPool {
         return this.ttsAdapters as Map<string, AdapterForTask[T]>;
       case 'music':
         return this.musicAdapters as Map<string, AdapterForTask[T]>;
+      case 'render':
+        return this.renderAdapters as Map<string, AdapterForTask[T]>;
       default: {
         const _exhaustive: never = taskType;
         throw new Error(`Unknown task type: ${_exhaustive}`);
@@ -64,6 +69,10 @@ export class AdapterPool {
 
   registerMusic(adapter: AIMusicAdapter): void {
     this.musicAdapters.set(adapter.provider, adapter);
+  }
+
+  registerRender(adapter: AIRenderAdapter): void {
+    this.renderAdapters.set(adapter.provider, adapter);
   }
 
   getText(provider: string): AITextAdapter {
@@ -106,6 +115,14 @@ export class AdapterPool {
     return adapter;
   }
 
+  getRender(provider: string): AIRenderAdapter {
+    const adapter = this.renderAdapters.get(provider);
+    if (!adapter) {
+      throw new Error(`Render adapter not found for provider: ${provider}`);
+    }
+    return adapter;
+  }
+
   /**
    * 按任务类型和 provider ID 路由获取 Adapter
    */
@@ -135,6 +152,7 @@ export class AdapterPool {
       video: {},
       tts: {},
       music: {},
+      render: {},
     };
 
     const tasks: Array<Promise<void>> = [];
@@ -174,6 +192,13 @@ export class AdapterPool {
         })
       );
     }
+    for (const [provider, adapter] of this.renderAdapters.entries()) {
+      tasks.push(
+        adapter.healthCheck().then((status) => {
+          report.render[provider] = status;
+        })
+      );
+    }
 
     await Promise.all(tasks);
     this.healthStatus = report;
@@ -200,6 +225,9 @@ export class AdapterPool {
     for (const provider of this.musicAdapters.keys()) {
       providers.push({ taskType: 'music', provider });
     }
+    for (const provider of this.renderAdapters.keys()) {
+      providers.push({ taskType: 'render', provider });
+    }
     return providers;
   }
 }
@@ -213,4 +241,5 @@ export interface HealthReport {
   video: Record<string, HealthStatus>;
   tts: Record<string, HealthStatus>;
   music: Record<string, HealthStatus>;
+  render: Record<string, HealthStatus>;
 }
