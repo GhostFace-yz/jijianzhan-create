@@ -20,7 +20,7 @@ function createTestServices() {
 }
 
 async function createTestProject(overrides: Record<string, unknown> = {}) {
-  return testPrisma.projects.create({
+  return testPrisma.project.create({
     data: {
       user_id: 'system',
       status: 'draft',
@@ -68,7 +68,7 @@ describe('OutlineService', () => {
     expect(outline.episodes.length).toBeGreaterThanOrEqual(1);
 
     // Verify stored in DB
-    const updated = await testPrisma.projects.findUnique({ where: { id: project.id } });
+    const updated = await testPrisma.project.findUnique({ where: { id: project.id } });
     expect(updated?.status).toBe('outlining');
     const stored = updated?.outline as Record<string, unknown> | null;
     expect(stored).toBeDefined();
@@ -181,7 +181,7 @@ describe('OutlineService', () => {
     expect(report.passes.some((p) => p.type === '服装连续性')).toBe(true);
   });
 
-  it('detects character location contradictions', async () => {
+  it('detects character location contradictions as warnings', async () => {
     const project = await createTestProject();
     await service.generateOutline(project.id);
 
@@ -201,8 +201,9 @@ describe('OutlineService', () => {
     });
 
     const report = await service.validateOutline(project.id);
-    const locationErrors = report.errors.filter((e) => e.type === '角色位置矛盾');
-    expect(locationErrors.length).toBeGreaterThanOrEqual(1);
+    const locationWarnings = report.warnings.filter((e) => e.type === '角色位置矛盾');
+    expect(locationWarnings.length).toBeGreaterThanOrEqual(1);
+    expect(report.passed).toBe(true);
   });
 
   it('throws when validating non-existent outline', async () => {
@@ -219,7 +220,7 @@ describe('OutlineService', () => {
     const confirmed = await service.confirmOutline(project.id);
     expect(confirmed).toBeDefined();
 
-    const updated = await testPrisma.projects.findUnique({ where: { id: project.id } });
+    const updated = await testPrisma.project.findUnique({ where: { id: project.id } });
     expect(updated?.outline_locked).toBe(true);
     expect(updated?.status).toBe('asset_prep');
 
@@ -233,17 +234,17 @@ describe('OutlineService', () => {
     expect(lockedSnap).toBeDefined();
   });
 
-  it('refuses to confirm when validation errors exist', async () => {
+  it('confirms outline even when location warnings exist', async () => {
     const project = await createTestProject();
     await service.generateOutline(project.id);
 
-    // Inject contradictory data with many locations to trigger errors
+    // Inject data that triggers location warnings but no errors
     await service.updateOutline(project.id, {
       episodes: [
         {
           episode_number: 1,
           title: 'Conflict',
-          summary: 'Episode with contradictions',
+          summary: 'Episode with many locations',
           key_events: ['Start', 'Middle', 'End'],
           featured_characters: ['Hero', 'Villain'],
           featured_locations: ['Location A', 'Location B', 'Location C'], // 3 locations
@@ -252,6 +253,11 @@ describe('OutlineService', () => {
       episode_count: 1,
     });
 
-    await expect(service.confirmOutline(project.id)).rejects.toThrow(/Cannot confirm|unresolved errors/);
+    const confirmed = await service.confirmOutline(project.id);
+    expect(confirmed).toBeDefined();
+
+    const updated = await testPrisma.project.findUnique({ where: { id: project.id } });
+    expect(updated?.outline_locked).toBe(true);
+    expect(updated?.status).toBe('asset_prep');
   });
 });

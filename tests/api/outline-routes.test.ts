@@ -51,6 +51,22 @@ describe('outline API routes', () => {
     expect(res.body.data.episode_count).toBeGreaterThanOrEqual(1);
   });
 
+  it('POST /generate auto-syncs outline characters to character bible', async () => {
+    const createRes = await request(app).post('/api/v1/projects').send(validProject);
+    const projectId = createRes.body.data.id;
+
+    const outlineRes = await request(app).post(`/api/v1/projects/${projectId}/outline/generate`);
+    const outlineCharacters = outlineRes.body.data.characters as Array<{ name: string }>;
+
+    const charactersRes = await request(app).get(`/api/v1/projects/${projectId}/characters`);
+    expect(charactersRes.status).toBe(200);
+    expect(charactersRes.body.data.total).toBe(outlineCharacters.length);
+    expect(charactersRes.body.data.characters).toHaveLength(outlineCharacters.length);
+    for (const oc of outlineCharacters) {
+      expect(charactersRes.body.data.characters.some((c: { name: string }) => c.name === oc.name)).toBe(true);
+    }
+  });
+
   it('POST /generate returns 500 for non-existent project', async () => {
     const res = await request(app).post('/api/v1/projects/non-existent/outline/generate');
     expect(res.status).toBe(500);
@@ -163,6 +179,61 @@ describe('outline API routes', () => {
     const projRes = await request(app).get(`/api/v1/projects/${projectId}`);
     expect(projRes.body.data.status).toBe('asset_prep');
     expect(projRes.body.data.outline_locked).toBe(true);
+  });
+
+  it('POST /confirm auto-syncs outline locations to scene bible', async () => {
+    const { projectId, outline } = await createProjectAndGenerateOutline();
+
+    const res = await request(app).post(`/api/v1/projects/${projectId}/outline/confirm`);
+
+    expect(res.status).toBe(200);
+
+    const locationsRes = await request(app).get(`/api/v1/projects/${projectId}/locations`);
+    expect(locationsRes.status).toBe(200);
+    expect(locationsRes.body.data.total).toBe(outline.locations.length);
+    for (const outlineLoc of outline.locations) {
+      expect(
+        locationsRes.body.data.locations.some((l: { name: string }) => l.name === outlineLoc.name)
+      ).toBe(true);
+    }
+  });
+
+  it('POST /confirm syncs enriched location fields to scene bible', async () => {
+    const { projectId } = await createProjectAndGenerateOutline();
+
+    const enrichedLocations = [
+      {
+        name: '主要场景',
+        description: 'Updated description',
+        space_type: 'indoor',
+        frequency: 'main',
+        style: 'modern',
+        color_tone: 'blue',
+        lighting_type: 'neon',
+        key_props: ['desk', 'lamp'],
+      },
+    ];
+
+    const updateRes = await request(app)
+      .put(`/api/v1/projects/${projectId}/outline`)
+      .send({ locations: enrichedLocations });
+    expect(updateRes.status).toBe(200);
+
+    const confirmRes = await request(app).post(`/api/v1/projects/${projectId}/outline/confirm`);
+    expect(confirmRes.status).toBe(200);
+
+    const locationsRes = await request(app).get(`/api/v1/projects/${projectId}/locations`);
+    expect(locationsRes.status).toBe(200);
+    expect(locationsRes.body.data.total).toBe(1);
+
+    const synced = locationsRes.body.data.locations[0];
+    expect(synced.name).toBe('主要场景');
+    expect(synced.space_type).toBe('indoor');
+    expect(synced.frequency).toBe('main');
+    expect(synced.style).toBe('modern');
+    expect(synced.color_tone).toBe('blue');
+    expect(synced.lighting_type).toBe('neon');
+    expect(synced.key_props).toEqual(['desk', 'lamp']);
   });
 
   it('POST /confirm returns 500 when no outline exists', async () => {

@@ -72,10 +72,10 @@ async function createProjectWithStoryboardNodes(episodeNumber = 1) {
     end_state: { characters: [], unresolved_conflicts: [], key_prop_states: {} },
   };
 
-  const project = await testPrisma.projects.findUnique({ where: { id: projectId } });
+  const project = await testPrisma.project.findUnique({ where: { id: projectId } });
   const meta = (project?.meta as Record<string, unknown>) || {};
   const updatedMeta = { ...meta, [`script_${epId}`]: mockScript };
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: { meta: updatedMeta as any },
   });
@@ -198,7 +198,7 @@ describe('POST /video/nodes/:nodeId/upload (multipart file upload)', () => {
       .post(`/api/v1/projects/${projectId}/episodes/${epId}/video/nodes/${nodeId}/upload`)
       .attach('video', Buffer.from('fake video content'), 'video.mp4');
 
-    const snapshots = await testPrisma.version_snapshots.findMany({
+    const snapshots = await testPrisma.versionSnapshot.findMany({
       where: {
         project_id: projectId,
         entity_type: 'node',

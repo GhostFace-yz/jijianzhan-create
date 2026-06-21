@@ -49,6 +49,31 @@
   --color-semantic-warning: #dd5b00;
   --color-semantic-error: #e03131;
 
+  /* shadcn/ui theme tokens mapped to DESIGN.md */
+  --color-background: #ffffff;
+  --color-foreground: #1a1a1a;
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1a1a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1a1a1a;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f6f5f4;
+  --color-secondary-foreground: #1a1a1a;
+  --color-muted: #f6f5f4;
+  --color-muted-foreground: #787671;
+  --color-accent: #e6e0f5;
+  --color-accent-foreground: #1a1a1a;
+  --color-destructive: #e03131;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e5e3df;
+  --color-input: #c8c4be;
+  --color-ring: #5645d4;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
   --font-sans: "Inter", -apple-system, system-ui, "Segoe UI", Helvetica, sans-serif;
 }
 

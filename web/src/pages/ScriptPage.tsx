@@ -23,6 +23,7 @@ import {
 } from '../api/script';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { Skeleton } from '../components/shadcn/skeleton';
 import { SceneCard } from '../components/script/SceneCard';
 import { ChangeImpactBanner } from '../components/script/ChangeImpactBanner';
 import { ScriptVersionHistory } from '../components/script/ScriptVersionHistory';
@@ -291,11 +292,11 @@ export function ScriptPage() {
               {!scriptData && (
                 <Button
                   onClick={handleGenerate}
-                  disabled={generateMutation.isPending}
+                  loading={generateMutation.isPending}
                   className="gap-2"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {generateMutation.isPending ? 'AI 生成中...' : '生成脚本'}
+                  生成脚本
                 </Button>
               )}
 
@@ -305,11 +306,12 @@ export function ScriptPage() {
                   <Button
                     variant="secondary"
                     onClick={handleSave}
-                    disabled={!dirty || saveMutation.isPending}
+                    loading={saveMutation.isPending}
+                    disabled={!dirty}
                     className="gap-2"
                   >
                     <Save className="h-4 w-4" />
-                    {saveMutation.isPending ? '保存中...' : '保存草稿'}
+                    保存草稿
                   </Button>
                 </>
               )}
@@ -322,9 +324,25 @@ export function ScriptPage() {
       <main className="mx-auto max-w-7xl px-6 py-8">
         {/* Loading */}
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-hairline-strong border-t-primary" />
-            <p className="mt-4 text-sm text-slate">加载脚本数据...</p>
+          <div className="space-y-6">
+            <div className="rounded-xl border border-hairline bg-canvas p-6 shadow-sm space-y-4">
+              <Skeleton className="h-8 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+            </div>
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-hairline bg-canvas p-6 shadow-sm space-y-4"
+              >
+                <Skeleton className="h-6 w-1/4" />
+                <Skeleton className="h-24 w-full" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-20" />
+                  <Skeleton className="h-8 w-20" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -349,9 +367,9 @@ export function ScriptPage() {
             <p className="mb-6 mt-2 max-w-md text-center text-slate">
               点击「生成脚本」让 AI 根据大纲自动生成完整的场景脚本和台词。
             </p>
-            <Button onClick={handleGenerate} disabled={generateMutation.isPending} className="gap-2">
+            <Button onClick={handleGenerate} loading={generateMutation.isPending} className="gap-2">
               <Sparkles className="h-4 w-4" />
-              {generateMutation.isPending ? 'AI 生成中...' : '生成脚本'}
+              生成脚本
             </Button>
           </div>
         )}
@@ -509,11 +527,11 @@ export function ScriptPage() {
 
                 <Button
                   onClick={handleConfirm}
-                  disabled={saveMutation.isPending}
+                  loading={saveMutation.isPending}
                   className="gap-2"
                 >
                   <CheckCircle className="h-4 w-4" />
-                  {saveMutation.isPending ? '保存并确认中...' : '确认脚本，进入分镜'}
+                  确认脚本，进入分镜
                 </Button>
               </div>
             </div>

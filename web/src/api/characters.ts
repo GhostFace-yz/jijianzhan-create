@@ -115,6 +115,11 @@ export async function rollbackCharacter(
   );
 }
 
+export async function syncCharactersFromOutline(projectId: string): Promise<CharacterListResponse> {
+  return request<CharacterListResponse>(`/projects/${projectId}/characters/sync-from-outline`, {
+    method: 'POST',
+  });
+}
 export async function listCharacterVersions(
   projectId: string,
   characterId: string

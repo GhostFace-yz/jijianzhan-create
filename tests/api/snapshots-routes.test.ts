@@ -87,7 +87,7 @@ describe('snapshot API routes', () => {
 
     expect(res.status).toBe(201);
 
-    const flags = await testPrisma.downstream_review_flags.findMany({
+    const flags = await testPrisma.downstreamReviewFlag.findMany({
       where: {
         project_id: 'project-1',
         source_entity_type: 'outline',

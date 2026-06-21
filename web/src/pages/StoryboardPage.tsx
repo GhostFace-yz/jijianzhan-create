@@ -20,6 +20,7 @@ import {
 } from '../api/storyboard';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { Skeleton } from '../components/shadcn/skeleton';
 import { StoryboardEditor } from '../components/script/StoryboardEditor';
 import {
   PROJECT_STATUS_LABELS,
@@ -223,11 +224,11 @@ export function StoryboardPage() {
               {!hasNodes && (
                 <Button
                   onClick={handleGenerate}
-                  disabled={splitMutation.isPending}
+                  loading={splitMutation.isPending}
                   className="gap-2"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {splitMutation.isPending ? 'AI 拆分中...' : 'AI 自动拆分分镜'}
+                  AI 自动拆分分镜
                 </Button>
               )}
 
@@ -236,11 +237,12 @@ export function StoryboardPage() {
                 <Button
                   variant="secondary"
                   onClick={handleSave}
-                  disabled={!dirty || saveMutation.isPending}
+                  loading={saveMutation.isPending}
+                  disabled={!dirty}
                   className="gap-2"
                 >
                   <Save className="h-4 w-4" />
-                  {saveMutation.isPending ? '保存中...' : '保存修改'}
+                  保存修改
                 </Button>
               )}
 
@@ -272,9 +274,21 @@ export function StoryboardPage() {
       <main className="flex-1 min-h-0">
         {/* Loading */}
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-hairline-strong border-t-primary" />
-            <p className="mt-4 text-sm text-slate">加载分镜节点...</p>
+          <div className="mx-auto max-w-7xl px-6 py-8 space-y-6" data-testid="storyboard-skeleton">
+            <Skeleton className="h-8 w-1/3" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-hairline bg-canvas p-4 shadow-sm space-y-3"
+                >
+                  <Skeleton className="h-5 w-1/2" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-24 w-full rounded-md" />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -305,11 +319,11 @@ export function StoryboardPage() {
               </p>
               <Button
                 onClick={handleGenerate}
-                disabled={splitMutation.isPending}
+                loading={splitMutation.isPending}
                 className="gap-2"
               >
                 <Sparkles className="h-4 w-4" />
-                {splitMutation.isPending ? 'AI 拆分中...' : 'AI 自动拆分分镜'}
+                AI 自动拆分分镜
               </Button>
             </div>
           </div>

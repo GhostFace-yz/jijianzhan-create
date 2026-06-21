@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import { Plus, Search, Filter, ArrowLeft, Users } from 'lucide-react';
-import { listCharacters, createCharacter } from '../../api/characters';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Search, Filter, ArrowLeft, Users, RefreshCw } from 'lucide-react';
+import { listCharacters, createCharacter, syncCharactersFromOutline } from '../../api/characters';
 import { getProject } from '../../api/projects';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -19,6 +19,7 @@ import {
 
 export function CharacterListPage() {
   const { projectId = '' } = useParams<{ projectId: string }>();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<CharacterStatus | 'all'>('all');
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
@@ -33,6 +34,13 @@ export function CharacterListPage() {
     queryKey: ['characters', projectId],
     queryFn: () => listCharacters(projectId),
     enabled: Boolean(projectId),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: () => syncCharactersFromOutline(projectId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['characters', projectId] });
+    },
   });
 
   const characters = data?.data.characters ?? [];
@@ -128,12 +136,28 @@ export function CharacterListPage() {
             </div>
             <h2 className="text-xl font-semibold text-ink">还没有角色</h2>
             <p className="mb-6 mt-2 max-w-md text-slate">
-              创建第一个角色卡片，开始构建角色圣经。
+              可以从大纲自动同步角色，或手动创建第一个角色卡片。
             </p>
-            <Button className="gap-2" onClick={() => setIsCreating(true)}>
-              <Plus className="h-4 w-4" />
-              手动创建角色
-            </Button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                variant="secondary"
+                className="gap-2"
+                onClick={() => syncMutation.mutate()}
+                loading={syncMutation.isPending}
+              >
+                <RefreshCw className="h-4 w-4" />
+                从大纲同步
+              </Button>
+              <Button className="gap-2" onClick={() => setIsCreating(true)}>
+                <Plus className="h-4 w-4" />
+                手动创建角色
+              </Button>
+            </div>
+            {syncMutation.isError ? (
+              <p className="mt-4 text-sm text-semantic-error">
+                同步失败：{syncMutation.error.message}
+              </p>
+            ) : null}
           </div>
         ) : (
           <>

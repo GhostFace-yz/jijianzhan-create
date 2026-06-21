@@ -15,7 +15,7 @@ export function createProjectService(options: ProjectServiceOptions = {}): Proje
   return {
     async createProject(input) {
       const now = new Date();
-      const row = await db.projects.create({
+      const row = await db.project.create({
         data: {
           user_id: input.userId ?? 'system',
           team_id: input.teamId ?? null,
@@ -46,8 +46,8 @@ export function createProjectService(options: ProjectServiceOptions = {}): Proje
       const skip = filters.offset ?? 0;
 
       const [total, rows] = await Promise.all([
-        db.projects.count({ where }),
-        db.projects.findMany({
+        db.project.count({ where }),
+        db.project.findMany({
           where,
           orderBy,
           take,
@@ -68,13 +68,13 @@ export function createProjectService(options: ProjectServiceOptions = {}): Proje
     },
 
     async getProject(id) {
-      return db.projects.findUnique({
+      return db.project.findUnique({
         where: { id },
       });
     },
 
     async updateProject(id, input) {
-      const existing = await db.projects.findUnique({ where: { id } });
+      const existing = await db.project.findUnique({ where: { id } });
       if (!existing) {
         throw new Error('Project not found');
       }
@@ -92,7 +92,7 @@ export function createProjectService(options: ProjectServiceOptions = {}): Proje
         data.status = input.status;
       }
 
-      const row = await db.projects.update({
+      const row = await db.project.update({
         where: { id },
         data,
       });
@@ -101,7 +101,7 @@ export function createProjectService(options: ProjectServiceOptions = {}): Proje
     },
 
     async deleteProject(id) {
-      await db.projects.delete({
+      await db.project.delete({
         where: { id },
       });
     },

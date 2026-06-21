@@ -84,20 +84,11 @@ export function ThreeViewGenerator({ projectId, character, onUpdated }: ThreeVie
         </div>
         <Button
           onClick={handleGenerateAll}
-          disabled={loadingViews.has('all')}
+          loading={loadingViews.has('all')}
           className="gap-2"
         >
-          {loadingViews.has('all') ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              生成中...
-            </>
-          ) : (
-            <>
-              <Wand2 className="h-4 w-4" />
-              {views.length > 0 ? '重新生成三视图' : '生成三视图'}
-            </>
-          )}
+          <Wand2 className="h-4 w-4" />
+          {views.length > 0 ? '重新生成三视图' : '生成三视图'}
         </Button>
       </div>
 
@@ -121,14 +112,10 @@ export function ThreeViewGenerator({ projectId, character, onUpdated }: ThreeVie
                   <Button
                     variant="ghost"
                     onClick={() => handleRetry(view)}
-                    disabled={isLoading}
+                    loading={isLoading}
                     className="h-8 gap-1 px-2 text-xs"
                   >
-                    {isLoading ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3" />
-                    )}
+                    <RefreshCw className="h-3 w-3" />
                     重生成
                   </Button>
                 </div>
@@ -155,20 +142,12 @@ export function ThreeViewGenerator({ projectId, character, onUpdated }: ThreeVie
         <div className="flex items-center justify-end">
           <Button
             onClick={handleConfirm}
-            disabled={loadingViews.has('confirm') || character.status === 'confirmed'}
+            loading={loadingViews.has('confirm')}
+            disabled={character.status === 'confirmed'}
             className="gap-2"
           >
-            {loadingViews.has('confirm') ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                确认中...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4" />
-                确认三视图
-              </>
-            )}
+            <CheckCircle2 className="h-4 w-4" />
+            确认三视图
           </Button>
         </div>
       ) : null}

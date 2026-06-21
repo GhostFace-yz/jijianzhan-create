@@ -1,13 +1,17 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { Spinner } from '../shadcn/spinner';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost';
+  loading?: boolean;
   children: ReactNode;
 }
 
 export function Button({
   variant = 'primary',
   className = '',
+  loading = false,
+  disabled,
   children,
   ...props
 }: ButtonProps) {
@@ -24,7 +28,12 @@ export function Button({
   };
 
   return (
-    <button className={`${base} ${variants[variant]} ${className}`} {...props}>
+    <button
+      className={`${base} ${variants[variant]} ${className}`}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading && <Spinner className="mr-2 h-4 w-4" />}
       {children}
     </button>
   );

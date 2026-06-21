@@ -1,4 +1,5 @@
 import { AdapterPool } from './pool.js';
+import { DeepSeekTextAdapter } from './providers/deepseek/deepseek-text-adapter.js';
 import { MockImageAdapter } from './providers/mock/mock-image-adapter.js';
 import { MockMusicAdapter } from './providers/mock/mock-music-adapter.js';
 import { MockRenderAdapter } from './providers/mock/mock-render-adapter.js';
@@ -12,6 +13,7 @@ import { MockVideoAdapter } from './providers/mock/mock-video-adapter.js';
  */
 export function registerAdapters(pool: AdapterPool): AdapterPool {
   pool.registerText(new MockTextAdapter());
+  pool.registerText(new DeepSeekTextAdapter());
   pool.registerImage(new MockImageAdapter());
   pool.registerVideo(new MockVideoAdapter());
   pool.registerTTS(new MockTTSAdapter());
@@ -33,3 +35,4 @@ export * from './router.js';
 export * from './error.js';
 export * from './logger.js';
 export * from './base-adapter.js';
+export * from './lib/provider-config.js';

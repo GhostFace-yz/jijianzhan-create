@@ -1,6 +1,7 @@
 import type { Character, CharacterStatus, RoleType } from '@prisma/client';
 import type { AdapterPool } from '../../adapters/pool.js';
 import type { SnapshotService } from '../snapshot/types.js';
+import type { StorageService } from '../storage/types.js';
 
 export type { Character, CharacterStatus, RoleType };
 
@@ -55,6 +56,7 @@ export interface CharacterService {
     projectId: string,
     outlineCharacters: OutlineCharacterInput[]
   ): Promise<Character[]>;
+  syncCharactersFromOutline(projectId: string): Promise<Character[]>;
   generateViews(projectId: string, charId: string, options?: GenerateViewsOptions): Promise<Character>;
   retryView(projectId: string, charId: string, viewId: string): Promise<Character>;
   confirmViews(projectId: string, charId: string): Promise<Character>;
@@ -66,4 +68,5 @@ export interface CharacterServiceOptions {
   prisma?: typeof import('../../lib/db.js').prisma;
   snapshotService?: SnapshotService;
   adapterPool?: AdapterPool;
+  storage?: StorageService;
 }

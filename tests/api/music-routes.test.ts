@@ -66,7 +66,7 @@ async function createProjectWithNodes(): Promise<string> {
   const nodes = createMockNodes();
   const storyboardData: EpisodesStoryboard = { [episodeId]: nodes };
 
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: { storyboard_nodes: storyboardData as unknown as Prisma.InputJsonValue },
   });
@@ -276,7 +276,7 @@ describe('music API routes', () => {
     ];
 
     const storyboardData: EpisodesStoryboard = { [episodeId]: contrastNodes };
-    await testPrisma.projects.update({
+    await testPrisma.project.update({
       where: { id: projectId },
       data: { storyboard_nodes: storyboardData as unknown as Prisma.InputJsonValue },
     });

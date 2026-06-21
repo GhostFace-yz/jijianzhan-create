@@ -77,6 +77,9 @@ describe('ProjectListPage', () => {
 
     expect(screen.getByText('古装风云')).toBeInTheDocument();
     expect(screen.getByText('共 2 个项目')).toBeInTheDocument();
+
+    const firstProjectLink = screen.getByRole('link', { name: /查看项目 都市奇缘/ });
+    expect(firstProjectLink).toHaveAttribute('href', '/projects/proj-1');
   });
 
   it('filters by status', async () => {

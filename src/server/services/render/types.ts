@@ -121,7 +121,7 @@ export interface RenderServiceOptions {
 }
 
 export interface QueueLike {
-  add(name: string, data: Record<string, unknown>): Promise<{ id: string }>;
+  add(name: string, data: unknown): Promise<{ id?: string }>;
 }
 
 // ── Internal Plan ───────────────────────────────────────────────────

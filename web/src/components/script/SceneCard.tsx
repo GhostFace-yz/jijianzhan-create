@@ -282,11 +282,11 @@ export function SceneCard({
               <Button
                 variant="ghost"
                 onClick={() => onRegenerateScene(scene.scene_id)}
-                disabled={regenerating}
+                loading={regenerating}
                 className="gap-2 text-semantic-warning hover:text-semantic-warning"
               >
-                <RefreshCw className={`h-4 w-4 ${regenerating ? 'animate-spin' : ''}`} />
-                {regenerating ? '重新生成中...' : '重新生成此场景'}
+                <RefreshCw className="h-4 w-4" />
+                重新生成此场景
               </Button>
             </div>
           )}

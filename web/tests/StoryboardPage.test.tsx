@@ -147,7 +147,7 @@ function renderPage({
 /** Wait for data to finish loading before making assertions */
 async function waitForData() {
   await waitFor(() => {
-    expect(screen.queryByText('加载分镜节点...')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('storyboard-skeleton')).not.toBeInTheDocument();
   }, { timeout: 3000 });
 }
 
@@ -250,13 +250,13 @@ describe('StoryboardPage', () => {
   });
 
   describe('Loading state', () => {
-    it('should show loading spinner while fetching', async () => {
+    it('should show skeleton placeholders while fetching', async () => {
       vi.mocked(getProject).mockReturnValue(new Promise(() => {}));
       vi.mocked(listStoryboardNodes).mockReturnValue(new Promise(() => {}));
 
       renderPage();
 
-      expect(screen.getByText('加载分镜节点...')).toBeInTheDocument();
+      expect(screen.getByTestId('storyboard-skeleton')).toBeInTheDocument();
     });
   });
 

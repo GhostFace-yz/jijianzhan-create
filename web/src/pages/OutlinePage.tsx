@@ -26,6 +26,7 @@ import { CharactersCard } from '../components/outline/CharactersCard';
 import { LocationsCard } from '../components/outline/LocationsCard';
 import { EpisodesTimeline } from '../components/outline/EpisodesTimeline';
 import { ValidationReportCard } from '../components/outline/ValidationReportCard';
+import { OutlineSkeleton } from '../components/outline/OutlineSkeleton';
 import {
   PROJECT_STATUS_LABELS,
   type OutlineData,
@@ -94,6 +95,7 @@ export function OutlinePage() {
       setValidationReport(null);
       queryClient.invalidateQueries({ queryKey: ['outline', projectId] });
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['characters', projectId] });
     },
   });
 
@@ -218,11 +220,11 @@ export function OutlinePage() {
               {!outlineData && canGenerate(projectStatus) && (
                 <Button
                   onClick={handleGenerate}
-                  disabled={generateMutation.isPending}
+                  loading={generateMutation.isPending}
                   className="gap-2"
                 >
                   <Sparkles className="h-4 w-4" />
-                  {generateMutation.isPending ? 'AI 生成中...' : '生成大纲'}
+                  生成大纲
                 </Button>
               )}
 
@@ -231,6 +233,7 @@ export function OutlinePage() {
                   <Button
                     variant="secondary"
                     onClick={() => setRegenerateAllConfirm(true)}
+                    loading={generateMutation.isPending}
                     className="gap-2"
                   >
                     <RefreshCw className="h-4 w-4" />
@@ -239,11 +242,12 @@ export function OutlinePage() {
                   <Button
                     variant="secondary"
                     onClick={handleSave}
-                    disabled={!dirty || saveMutation.isPending}
+                    loading={saveMutation.isPending}
+                    disabled={!dirty}
                     className="gap-2"
                   >
                     <Save className="h-4 w-4" />
-                    {saveMutation.isPending ? '保存中...' : '保存草稿'}
+                    保存草稿
                   </Button>
                 </>
               )}
@@ -253,19 +257,19 @@ export function OutlinePage() {
                   <Button
                     variant="secondary"
                     onClick={handleValidate}
-                    disabled={validateMutation.isPending}
+                    loading={validateMutation.isPending}
                     className="gap-2"
                   >
                     <ShieldAlert className="h-4 w-4" />
-                    {validateMutation.isPending ? '检查中...' : '自洽性检查'}
+                    自洽性检查
                   </Button>
                   <Button
                     onClick={() => confirmDialogRef.current?.showModal()}
-                    disabled={confirmMutation.isPending}
+                    loading={confirmMutation.isPending}
                     className="gap-2"
                   >
                     <Lock className="h-4 w-4" />
-                    {confirmMutation.isPending ? '确认中...' : '确认大纲'}
+                    确认大纲
                   </Button>
                 </>
               )}
@@ -277,10 +281,21 @@ export function OutlinePage() {
       {/* Main content */}
       <main className="mx-auto max-w-7xl px-6 py-8">
         {/* Loading */}
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-hairline-strong border-t-primary" />
-            <p className="mt-4 text-sm text-slate">加载大纲数据...</p>
+        {isLoading && <OutlineSkeleton />}
+
+        {/* AI generation loading overlay */}
+        {generateMutation.isPending && !outlineData && (
+          <div className="mb-6 rounded-xl border border-primary/20 bg-card-tint-lavender p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-ink">AI 正在生成大纲</h2>
+                <p className="text-sm text-slate">请稍候，DeepSeek 正在根据项目描述创作剧情框架...</p>
+              </div>
+            </div>
+            <OutlineSkeleton />
           </div>
         )}
 
@@ -308,9 +323,9 @@ export function OutlinePage() {
               点击「生成大纲」让 AI 根据项目描述生成完整的剧情框架。
             </p>
             {canGenerate(projectStatus) ? (
-              <Button onClick={handleGenerate} disabled={generateMutation.isPending} className="gap-2">
+              <Button onClick={handleGenerate} loading={generateMutation.isPending} className="gap-2">
                 <Sparkles className="h-4 w-4" />
-                {generateMutation.isPending ? 'AI 生成中...' : '生成大纲'}
+                生成大纲
               </Button>
             ) : (
               <p className="text-sm text-muted">
@@ -434,8 +449,8 @@ export function OutlinePage() {
               <Button variant="secondary" onClick={() => setRegenerateAllConfirm(false)}>
                 取消
               </Button>
-              <Button onClick={handleRegenerateAll} disabled={generateMutation.isPending}>
-                {generateMutation.isPending ? '生成中...' : '确认重新生成'}
+              <Button onClick={handleRegenerateAll} loading={generateMutation.isPending}>
+                确认重新生成
               </Button>
             </div>
           </div>
@@ -471,8 +486,8 @@ export function OutlinePage() {
           <Button variant="secondary" onClick={() => confirmDialogRef.current?.close()}>
             取消
           </Button>
-          <Button onClick={handleConfirm} disabled={confirmMutation.isPending}>
-            {confirmMutation.isPending ? '确认中...' : '确认锁定'}
+          <Button onClick={handleConfirm} loading={confirmMutation.isPending}>
+            确认锁定
           </Button>
         </div>
       </dialog>

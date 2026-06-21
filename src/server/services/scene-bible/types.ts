@@ -33,6 +33,12 @@ export type UpdateLocationInput = Partial<CreateLocationInput>;
 export interface OutlineLocationInput {
   name: string;
   description?: string | null;
+  frequency?: string | null;
+  space_type?: string | null;
+  style?: string | null;
+  color_tone?: string | null;
+  lighting_type?: string | null;
+  key_props?: string[];
 }
 
 export interface GenerateBaseCandidatesOptions {

@@ -1,4 +1,5 @@
 import type { AIModelInfo, SnapshotService } from '../snapshot/types.js';
+import { getVideoProviderConfig } from '../../adapters/lib/provider-config.js';
 import type {
   VideoService,
   VideoServiceOptions,
@@ -258,7 +259,8 @@ export function createVideoService(options: VideoServiceOptions): VideoService {
       sceneBibleService,
     );
 
-    const primaryProvider = options?.provider ?? 'mock-video';
+    const videoConfig = getVideoProviderConfig();
+    const primaryProvider = options?.provider ?? videoConfig.provider;
     const fallbackProvider = options?.fallback_provider ?? 'mock-video-fallback';
 
     let lastError: Error | null = null;
@@ -300,7 +302,10 @@ export function createVideoService(options: VideoServiceOptions): VideoService {
               },
               {
                 provider: currentProvider,
-                model: 'video-model',
+                model:
+                  currentProvider === videoConfig.provider
+                    ? videoConfig.model
+                    : 'mock-model',
               },
             );
             attemptResult = result.data;

@@ -1,15 +1,25 @@
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { createProject } from '../api/projects';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Textarea } from '../components/ui/Textarea';
-import { Select } from '../components/ui/Select';
+import { Button } from '@/components/shadcn/button';
+import { Input } from '@/components/shadcn/input';
+import { Textarea } from '@/components/shadcn/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/shadcn/select';
+import { Label } from '@/components/shadcn/label';
+import { Field, FieldError } from '@/components/shadcn/field';
+import { Checkbox } from '@/components/shadcn/checkbox';
+import { cn } from '@/lib/utils';
 import {
   PROJECT_GENRE_OPTIONS,
   PROJECT_DURATION_GOAL_OPTIONS,
@@ -28,16 +38,19 @@ const styleTagSchema = z.enum([
 const createProjectSchema = z.object({
   title: z.string().min(1, '标题不能为空').max(50, '标题最多 50 字'),
   description: z.string().min(1, '创意描述不能为空').max(1000, '创意描述最多 1000 字'),
-  genre: z.enum([
-    'urban_romance',
-    'ancient_costume',
-    'suspense',
-    'comedy',
-    'sci_fi',
-    'other',
-  ], {
-    required_error: '请选择题材',
-  }),
+  genre: z.enum(
+    [
+      'urban_romance',
+      'ancient_costume',
+      'suspense',
+      'comedy',
+      'sci_fi',
+      'other',
+    ],
+    {
+      required_error: '请选择题材',
+    },
+  ),
   target_episodes: z.coerce
     .number()
     .int('集数必须为整数')
@@ -92,7 +105,7 @@ export function CreateProjectPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
-    register,
+    control,
     handleSubmit,
     watch,
     formState: { errors },
@@ -147,123 +160,228 @@ export function CreateProjectPage() {
           noValidate
         >
           <div className="space-y-6">
-            <div>
-              <label htmlFor="title" className="mb-2 block text-sm font-medium text-ink">
-                项目标题 *
-              </label>
-              <Input
-                id="title"
-                placeholder="给你的短剧起个名字"
-                maxLength={50}
-                {...register('title')}
-                error={errors.title?.message}
-                aria-invalid={errors.title ? 'true' : 'false'}
+            <Field>
+              <Label htmlFor="title">项目标题 *</Label>
+              <Controller
+                control={control}
+                name="title"
+                render={({ field }) => (
+                  <Input
+                    id="title"
+                    placeholder="给你的短剧起个名字"
+                    maxLength={50}
+                    className="h-11 px-4 text-base"
+                    aria-invalid={errors.title ? 'true' : 'false'}
+                    {...field}
+                  />
+                )}
               />
-              <p className="mt-1.5 text-right text-xs text-stone">
+              <p className="text-right text-xs text-stone">
                 {title?.length ?? 0} / 50
               </p>
-            </div>
-
-            <div>
-              <label htmlFor="description" className="mb-2 block text-sm font-medium text-ink">
-                创意描述 *
-              </label>
-              <Textarea
-                id="description"
-                placeholder="简要描述故事创意、核心冲突和目标观众..."
-                maxLength={1000}
-                {...register('description')}
-                error={errors.description?.message}
-                aria-invalid={errors.description ? 'true' : 'false'}
+              <FieldError
+                errors={errors.title?.message ? [errors.title.message] : undefined}
               />
-              <p className="mt-1.5 text-right text-xs text-stone">
+            </Field>
+
+            <Field>
+              <Label htmlFor="description">创意描述 *</Label>
+              <Controller
+                control={control}
+                name="description"
+                render={({ field }) => (
+                  <Textarea
+                    id="description"
+                    placeholder="简要描述故事创意、核心冲突和目标观众..."
+                    maxLength={1000}
+                    className="min-h-[120px] px-4 py-3 text-base"
+                    aria-invalid={errors.description ? 'true' : 'false'}
+                    {...field}
+                  />
+                )}
+              />
+              <p className="text-right text-xs text-stone">
                 {description?.length ?? 0} / 1000
               </p>
-            </div>
-
-            <div>
-              <label htmlFor="genre" className="mb-2 block text-sm font-medium text-ink">
-                题材 *
-              </label>
-              <Select
-                id="genre"
-                options={[{ value: '', label: '请选择题材' }, ...PROJECT_GENRE_OPTIONS]}
-                {...register('genre')}
-                error={errors.genre?.message}
-                aria-invalid={errors.genre ? 'true' : 'false'}
+              <FieldError
+                errors={
+                  errors.description?.message
+                    ? [errors.description.message]
+                    : undefined
+                }
               />
-            </div>
+            </Field>
+
+            <Field>
+              <Label htmlFor="genre">题材 *</Label>
+              <Controller
+                control={control}
+                name="genre"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? ''}
+                    onValueChange={field.onChange}
+                  >
+                    <SelectTrigger
+                      id="genre"
+                      className="h-11 w-full px-4 text-base"
+                      aria-invalid={errors.genre ? 'true' : 'false'}
+                    >
+                      <SelectValue placeholder="请选择题材" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROJECT_GENRE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <FieldError
+                errors={errors.genre?.message ? [errors.genre.message] : undefined}
+              />
+            </Field>
 
             <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <label htmlFor="target_episodes" className="mb-2 block text-sm font-medium text-ink">
-                  目标集数
-                </label>
-                <Input
-                  id="target_episodes"
-                  type="number"
-                  min={1}
-                  max={100}
-                  placeholder="留空让 AI 后续建议"
-                  {...register('target_episodes')}
-                  error={errors.target_episodes?.message}
-                  aria-invalid={errors.target_episodes ? 'true' : 'false'}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="duration_goal" className="mb-2 block text-sm font-medium text-ink">
-                  时长目标
-                </label>
-                <Select
-                  id="duration_goal"
-                  options={[
-                    { value: '', label: '请选择时长目标' },
-                    ...PROJECT_DURATION_GOAL_OPTIONS,
-                  ]}
-                  {...register('duration_goal')}
-                  error={errors.duration_goal?.message}
-                  aria-invalid={errors.duration_goal ? 'true' : 'false'}
-                />
-              </div>
-            </div>
-
-            <div>
-              <span className="mb-2 block text-sm font-medium text-ink">风格标签</span>
-              <div className="flex flex-wrap gap-2">
-                {PROJECT_STYLE_TAG_OPTIONS.map((option) => (
-                  <label
-                    key={option.value}
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-hairline-strong bg-canvas px-3 py-2 text-sm text-ink transition-colors hover:bg-surface has-[:checked]:border-primary has-[:checked]:bg-card-tint-lavender has-[:checked]:text-primary"
-                  >
-                    <input
-                      type="checkbox"
-                      value={option.value}
-                      {...register('style_tags')}
-                      className="h-4 w-4 accent-primary"
+              <Field>
+                <Label htmlFor="target_episodes">目标集数</Label>
+                <Controller
+                  control={control}
+                  name="target_episodes"
+                  render={({ field }) => (
+                    <Input
+                      id="target_episodes"
+                      type="number"
+                      min={1}
+                      max={100}
+                      placeholder="留空让 AI 后续建议"
+                      className="h-11 px-4 text-base"
+                      aria-invalid={errors.target_episodes ? 'true' : 'false'}
+                      {...field}
+                      value={field.value ?? ''}
                     />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-              {errors.style_tags ? (
-                <p className="mt-1.5 text-sm text-semantic-error">{errors.style_tags.message}</p>
-              ) : null}
+                  )}
+                />
+                <FieldError
+                  errors={
+                    errors.target_episodes?.message
+                      ? [errors.target_episodes.message]
+                      : undefined
+                  }
+                />
+              </Field>
+
+              <Field>
+                <Label htmlFor="duration_goal">时长目标</Label>
+                <Controller
+                  control={control}
+                  name="duration_goal"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ''}
+                      onValueChange={(value) =>
+                        field.onChange(value === '' ? undefined : value)
+                      }
+                    >
+                      <SelectTrigger
+                        id="duration_goal"
+                        className="h-11 w-full px-4 text-base"
+                        aria-invalid={errors.duration_goal ? 'true' : 'false'}
+                      >
+                        <SelectValue placeholder="请选择时长目标" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROJECT_DURATION_GOAL_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldError
+                  errors={
+                    errors.duration_goal?.message
+                      ? [errors.duration_goal.message]
+                      : undefined
+                  }
+                />
+              </Field>
             </div>
 
-            <div>
-              <label htmlFor="notes" className="mb-2 block text-sm font-medium text-ink">
-                创作备注
-              </label>
-              <Textarea
-                id="notes"
-                placeholder="补充创作方向、参考作品、特殊要求等..."
-                maxLength={2000}
-                {...register('notes')}
-                error={errors.notes?.message}
-                aria-invalid={errors.notes ? 'true' : 'false'}
+            <Field>
+              <Label>风格标签</Label>
+              <Controller
+                control={control}
+                name="style_tags"
+                render={({ field }) => (
+                  <div className="flex flex-wrap gap-2">
+                    {PROJECT_STYLE_TAG_OPTIONS.map((option) => {
+                      const checked = field.value?.includes(option.value) ?? false;
+                      return (
+                        <label
+                          key={option.value}
+                          className={cn(
+                            'inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors',
+                            checked
+                              ? 'border-primary bg-card-tint-lavender text-primary'
+                              : 'border-hairline-strong bg-canvas text-ink hover:bg-surface',
+                          )}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(isChecked) => {
+                              const current = field.value ?? [];
+                              if (isChecked) {
+                                field.onChange([...current, option.value]);
+                              } else {
+                                field.onChange(
+                                  current.filter((v) => v !== option.value),
+                                );
+                              }
+                            }}
+                            aria-label={option.label}
+                          />
+                          {option.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               />
-            </div>
+              <FieldError
+                errors={
+                  errors.style_tags?.message
+                    ? [errors.style_tags.message]
+                    : undefined
+                }
+              />
+            </Field>
+
+            <Field>
+              <Label htmlFor="notes">创作备注</Label>
+              <Controller
+                control={control}
+                name="notes"
+                render={({ field }) => (
+                  <Textarea
+                    id="notes"
+                    placeholder="补充创作方向、参考作品、特殊要求等..."
+                    maxLength={2000}
+                    className="min-h-[120px] px-4 py-3 text-base"
+                    aria-invalid={errors.notes ? 'true' : 'false'}
+                    {...field}
+                    value={field.value ?? ''}
+                  />
+                )}
+              />
+              <FieldError
+                errors={errors.notes?.message ? [errors.notes.message] : undefined}
+              />
+            </Field>
           </div>
 
           {submitError ? (
@@ -274,7 +392,9 @@ export function CreateProjectPage() {
 
           <div className="mt-8 flex items-center justify-end gap-3">
             <Link to="/">
-              <Button type="button" variant="secondary">取消</Button>
+              <Button type="button" variant="outline">
+                取消
+              </Button>
             </Link>
             <Button
               type="submit"

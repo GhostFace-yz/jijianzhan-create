@@ -466,7 +466,7 @@ export function createStoryboardService(options: StoryboardServiceOptions = {}):
   const maxRetries = options.maxRetries ?? 2;
 
   async function ensureProject(projectId: string) {
-    const project = await db.projects.findUnique({ where: { id: projectId } });
+    const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) throw new Error('Project not found');
     return project;
   }
@@ -513,7 +513,7 @@ export function createStoryboardService(options: StoryboardServiceOptions = {}):
       [episodeId]: nodes,
     };
 
-    await db.projects.update({
+    await db.project.update({
       where: { id: projectId },
       data: {
         storyboard_nodes: updated as unknown as Prisma.InputJsonValue,

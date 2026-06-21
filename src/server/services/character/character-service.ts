@@ -1,5 +1,10 @@
-import { Prisma, SnapshotSource } from '@prisma/client';
+import { Prisma, RoleType, SnapshotSource } from '@prisma/client';
+import { z } from 'zod';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { prisma } from '../../lib/db.js';
+import { getImageProviderConfig, getTextProviderConfig } from '../../adapters/lib/provider-config.js';
 import type { AIModelInfo, SnapshotService } from '../snapshot/types.js';
 import type {
   Character,
@@ -12,9 +17,10 @@ import type {
   UpdateCharacterInput,
 } from './types.js';
 import { CHARACTER_STATUSES, ROLE_TYPES } from './types.js';
+import type { OutlineCharacter, OutlineData, OutlineEpisode } from '../outline/types.js';
 
 const NEGATIVE_PROMPT =
-  'multiple people, extra limbs, bad anatomy, blurry, watermark, text, logo, nsfw';
+  'multiple people, multiple views, character sheet, character turnaround, model sheet, reference sheet, rotation sequence, three views, front and side and back, collage, grid layout, split screen, panels, duplicate figures, mirrored figures, text, labels, arrows, guidelines, watermark, logo, extra limbs, bad anatomy, blurry, low quality';
 
 const VIEWS = ['front', 'side', 'back'] as const;
 const EXPRESSIONS = ['happy', 'sad', 'angry', 'surprised'] as const;
@@ -24,6 +30,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
   const db = options.prisma ?? prisma;
   const snapshotService = options.snapshotService;
   const adapterPool = options.adapterPool;
+  const storage = options.storage;
 
   function parseRefImages(character: Character): CharacterRefImage[] {
     const value = character.ref_images;
@@ -77,14 +84,14 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
   }
 
   async function ensureProjectExists(projectId: string): Promise<void> {
-    const project = await db.projects.findUnique({ where: { id: projectId } });
+    const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) {
       throw new Error('Project not found');
     }
   }
 
   async function ensureCharacter(projectId: string, charId: string): Promise<Character> {
-    const character = await db.characters.findUnique({ where: { id: charId } });
+    const character = await db.character.findUnique({ where: { id: charId } });
     if (!character || character.project_id !== projectId) {
       throw new Error('Character not found');
     }
@@ -101,17 +108,167 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
     return Math.abs(hash) % 2_147_483_647;
   }
 
+  async function persistGeneratedImage(
+    remoteUrl: string,
+    storageKey: string
+  ): Promise<string> {
+    if (!storage) {
+      return remoteUrl;
+    }
+
+    const res = await fetch(remoteUrl);
+    if (!res.ok) {
+      throw new Error(`Failed to download generated image: ${res.status}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'agnes-'));
+    const tmpPath = path.join(tmpDir, 'image.png');
+    await writeFile(tmpPath, buffer);
+
+    const saved = await storage.save(tmpPath, storageKey);
+    return saved.url;
+  }
+
+  const aiCharacterDetailSchema = z.object({
+    name: z.string().min(1),
+    appearance: z.string().max(2000).optional().nullable(),
+    costume: z.string().max(2000).optional().nullable(),
+    expression: z.string().max(2000).optional().nullable(),
+    signature_action: z.string().max(500).optional().nullable(),
+    voice_description: z.string().max(500).optional().nullable(),
+  });
+
+  function formatEpisodeRange(numbers: number[]): string {
+    if (numbers.length === 0) {
+      return '';
+    }
+    const sorted = [...new Set(numbers)].sort((a, b) => a - b);
+    const ranges: string[] = [];
+    let start = sorted[0];
+    let end = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i] === end + 1) {
+        end = sorted[i];
+      } else {
+        ranges.push(start === end ? String(start) : `${start}-${end}`);
+        start = end = sorted[i];
+      }
+    }
+    ranges.push(start === end ? String(start) : `${start}-${end}`);
+    return ranges.join(', ');
+  }
+
+  function computeEpisodeRange(name: string, episodes: OutlineEpisode[]): string {
+    const numbers = episodes
+      .filter((ep) => ep.featured_characters.includes(name))
+      .map((ep) => ep.episode_number);
+    if (numbers.length === 0) {
+      return '';
+    }
+    return formatEpisodeRange(numbers);
+  }
+
+  function buildCharacterBibleSystemPrompt(): string {
+    return `You are a professional character designer for Chinese short drama series.
+Given the story outline and character list, generate detailed character bible fields.
+You MUST respond with ONLY valid JSON — no markdown formatting, no code fences, no explanations.
+Return a JSON array where each item has exactly this shape:
+{
+  "name": "character name exactly as provided",
+  "appearance": "detailed physical appearance in Chinese",
+  "costume": "clothing and costume plan in Chinese",
+  "expression": "facial expression characteristics in Chinese",
+  "signature_action": "signature gesture or action in Chinese",
+  "voice_description": "voice tone description in Chinese"
+}
+Do not include role_type or episode_range in the output.`;
+  }
+
+  function buildCharacterBiblePrompt(
+    meta: Record<string, unknown>,
+    outline: OutlineData,
+    characters: Array<OutlineCharacter & { episode_range: string }>
+  ): string {
+    const parts: string[] = [];
+    parts.push(`Project: ${meta.title || 'Untitled'}`);
+    parts.push(`Genre: ${meta.genre || 'other'}`);
+    if (Array.isArray(meta.style_tags) && meta.style_tags.length > 0) {
+      parts.push(`Visual style: ${(meta.style_tags as string[]).join(', ')}`);
+    }
+    parts.push(`\nWorld setting:\n${outline.world_setting}`);
+    parts.push(`\nMain conflict:\n${outline.main_conflict}`);
+
+    parts.push(`\nEpisodes:`);
+    for (const ep of outline.episodes) {
+      parts.push(`Episode ${ep.episode_number}: ${ep.title}`);
+      parts.push(`  Summary: ${ep.summary}`);
+      parts.push(`  Featured characters: ${ep.featured_characters.join(', ')}`);
+    }
+
+    parts.push(`\nCharacters to detail:`);
+    for (const c of characters) {
+      parts.push(`- ${c.name} (${c.role_type}, appears in episodes ${c.episode_range || 'TBD'})`);
+      parts.push(`  Description: ${c.description}`);
+    }
+
+    parts.push(`\nGenerate the character bible array now.`);
+    return parts.join('\n');
+  }
+
+  function parseAIDetails(
+    content: string
+  ): Array<z.infer<typeof aiCharacterDetailSchema>> | null {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      const fenceMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (fenceMatch) {
+        try {
+          parsed = JSON.parse(fenceMatch[1].trim());
+        } catch {
+          return null;
+        }
+      } else {
+        const bracketMatch = content.match(/\[[\s\S]*\]/);
+        if (!bracketMatch) {
+          return null;
+        }
+        try {
+          parsed = JSON.parse(bracketMatch[0]);
+        } catch {
+          return null;
+        }
+      }
+    }
+
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+
+    const result = z.array(aiCharacterDetailSchema).safeParse(parsed);
+    return result.success ? result.data : null;
+  }
+
   function buildViewPrompt(character: Character, view: string): string {
+    const angleDesc: Record<string, string> = {
+      front:
+        'facing the camera, looking straight at the viewer, head to toe visible',
+      side:
+        'in strict profile, facing to the left, whole body from head to toe visible',
+      back:
+        'seen from behind, back to the camera, whole body from head to toe visible',
+    };
+
     const parts = [
-      'Character design',
-      `${view} view`,
-      character.name,
+      `Single illustration of ${character.name}, ${angleDesc[view]}, standing relaxed`,
+      'only one person, centered, isolated figure',
+      'plain white background',
       character.appearance,
       character.costume ? `wearing ${character.costume}` : '',
-      character.expression,
-      character.signature_action,
+      'highly detailed, sharp focus, soft lighting',
     ];
-    return parts.filter(Boolean).join(', ');
+    return parts.filter(Boolean).join('. ');
   }
 
   function buildRefPrompt(character: Character, kind: string, detail: string): string {
@@ -128,6 +285,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
     character: Character,
     view: string,
     seed: number,
+    storageKey: string,
     referenceImages?: string[]
   ): Promise<CharacterRefImage> {
     if (!adapterPool) {
@@ -137,21 +295,23 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         seed,
       };
     }
-    const adapter = adapterPool.getImage('mock-image');
+    const imageConfig = getImageProviderConfig();
+    const adapter = adapterPool.getImage(imageConfig.provider);
     const result = await adapter.generateImage(
       {
         prompt: buildViewPrompt(character, view),
         negativePrompt: NEGATIVE_PROMPT,
         referenceImages,
         seed,
-        width: 1024,
+        width: 768,
         height: 1024,
       },
-      { provider: 'mock-image', model: 'mock-model' }
+      imageConfig
     );
+    const localUrl = await persistGeneratedImage(result.data.url, storageKey);
     return {
       view,
-      url: result.data.url,
+      url: localUrl,
       seed: result.data.seed,
     };
   }
@@ -161,6 +321,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
     view: string,
     detail: string,
     seed: number,
+    storageKey: string,
     referenceImages?: string[]
   ): Promise<CharacterRefImage> {
     if (!adapterPool) {
@@ -170,7 +331,8 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         seed,
       };
     }
-    const adapter = adapterPool.getImage('mock-image');
+    const imageConfig = getImageProviderConfig();
+    const adapter = adapterPool.getImage(imageConfig.provider);
     const result = await adapter.generateImage(
       {
         prompt: buildRefPrompt(character, view, detail),
@@ -180,11 +342,12 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         width: 1024,
         height: 1024,
       },
-      { provider: 'mock-image', model: 'mock-model' }
+      imageConfig
     );
+    const localUrl = await persistGeneratedImage(result.data.url, storageKey);
     return {
       view,
-      url: result.data.url,
+      url: localUrl,
       seed: result.data.seed,
     };
   }
@@ -210,8 +373,8 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       await ensureProjectExists(projectId);
       const where: Prisma.CharacterWhereInput = { project_id: projectId };
       const [total, characters] = await Promise.all([
-        db.characters.count({ where }),
-        db.characters.findMany({
+        db.character.count({ where }),
+        db.character.findMany({
           where,
           orderBy: { updated_at: 'desc' },
         }),
@@ -226,14 +389,14 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         project_id: projectId,
         ref_images: [] as unknown as Prisma.InputJsonValue,
       };
-      const character = await db.characters.create({ data });
+      const character = await db.character.create({ data });
       await snapshotCharacter(character, 'user_edited');
       return character;
     },
 
     async getCharacter(projectId: string, charId: string) {
       await ensureProjectExists(projectId);
-      const character = await db.characters.findUnique({ where: { id: charId } });
+      const character = await db.character.findUnique({ where: { id: charId } });
       if (!character || character.project_id !== projectId) {
         return null;
       }
@@ -256,7 +419,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       if (input.voice_description !== undefined) data.voice_description = input.voice_description;
       if (input.status !== undefined) data.status = input.status;
 
-      const character = await db.characters.update({ where: { id: charId }, data });
+      const character = await db.character.update({ where: { id: charId }, data });
       await snapshotCharacter(character, 'user_edited');
       return character;
     },
@@ -265,14 +428,14 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       await ensureProjectExists(projectId);
       await ensureCharacter(projectId, charId);
       if (snapshotService) {
-        await db.version_snapshots.deleteMany({
+        await db.versionSnapshot.deleteMany({
           where: {
             project_id: projectId,
             entity_type: 'character',
             entity_id: charId,
           },
         });
-        await db.version_counters.deleteMany({
+        await db.versionCounter.deleteMany({
           where: {
             project_id: projectId,
             entity_type: 'character',
@@ -280,7 +443,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
           },
         });
       }
-      await db.characters.delete({ where: { id: charId } });
+      await db.character.delete({ where: { id: charId } });
     },
 
     async autoCreateCharacters(projectId: string, outlineCharacters: OutlineCharacterInput[]) {
@@ -292,7 +455,71 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
           project_id: projectId,
           ref_images: [] as unknown as Prisma.InputJsonValue,
         };
-        const character = await db.characters.create({ data });
+        const character = await db.character.create({ data });
+        await snapshotCharacter(character, 'ai_generated');
+        created.push(character);
+      }
+      return created;
+    },
+
+    async syncCharactersFromOutline(projectId: string): Promise<Character[]> {
+      await ensureProjectExists(projectId);
+      const project = await db.project.findUnique({ where: { id: projectId } });
+      const outline = (project?.outline ?? null) as OutlineData | null;
+      if (!outline || outline.characters.length === 0) {
+        return [];
+      }
+      const meta = (project?.meta ?? {}) as Record<string, unknown>;
+
+      const enrichedCharacters = outline.characters.map((c) => ({
+        ...c,
+        episode_range: computeEpisodeRange(c.name, outline.episodes),
+      }));
+
+      let aiDetails: Array<z.infer<typeof aiCharacterDetailSchema>> = [];
+      if (adapterPool) {
+        const prompt = buildCharacterBiblePrompt(meta, outline, enrichedCharacters);
+        const systemPrompt = buildCharacterBibleSystemPrompt();
+        const textConfig = getTextProviderConfig();
+        const adapter = adapterPool.getText(textConfig.provider);
+        try {
+          const result = await adapter.generateText(prompt, systemPrompt, undefined, textConfig);
+          const parsed = parseAIDetails(result.data.content);
+          if (parsed) {
+            aiDetails = parsed;
+          }
+        } catch (err) {
+          console.error(
+            'Character bible AI generation failed:',
+            err instanceof Error ? err.message : err
+          );
+        }
+      }
+
+      const created: Character[] = [];
+      for (const item of enrichedCharacters) {
+        const existing = await db.character.findFirst({
+          where: { project_id: projectId, name: item.name },
+        });
+        if (existing) {
+          continue;
+        }
+
+        const detail = aiDetails.find((d) => d.name === item.name);
+        const data: Prisma.CharacterCreateInput = {
+          name: item.name,
+          role_type: item.role_type as RoleType,
+          project_id: projectId,
+          episode_range: item.episode_range,
+          appearance: detail?.appearance ?? null,
+          costume: detail?.costume ?? null,
+          expression: detail?.expression ?? null,
+          signature_action: detail?.signature_action ?? null,
+          voice_description: detail?.voice_description ?? null,
+          status: 'draft',
+          ref_images: [] as unknown as Prisma.InputJsonValue,
+        };
+        const character = await db.character.create({ data });
         await snapshotCharacter(character, 'ai_generated');
         created.push(character);
       }
@@ -305,22 +532,35 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         (img) => !VIEWS.includes(img.view as (typeof VIEWS)[number])
       );
 
-      const generated = await Promise.all(
-        VIEWS.map((view) => {
-          const seed = options.seed ?? hashCode(`${charId}-${view}`);
-          return generateImageForView(character, view, seed);
-        })
-      );
+      function viewKey(view: string) {
+        return `characters/${projectId}/${charId}/${view}.png`;
+      }
 
-      const characterUpdated = await db.characters.update({
+      // 三视图作为三个完全独立的任务分别生成，避免参考图导致模型输出拼贴图
+      const frontSeed = options.seed ?? hashCode(`${charId}-front`);
+      const front = await generateImageForView(character, 'front', frontSeed, viewKey('front'));
+
+      const sideSeed = options.seed ?? hashCode(`${charId}-side`);
+      const side = await generateImageForView(character, 'side', sideSeed, viewKey('side'));
+
+      const backSeed = options.seed ?? hashCode(`${charId}-back`);
+      const back = await generateImageForView(character, 'back', backSeed, viewKey('back'));
+
+      const generated = [front, side, back];
+
+      const characterUpdated = await db.character.update({
         where: { id: charId },
         data: {
           ref_images: [...refImages, ...generated] as unknown as Prisma.InputJsonValue,
           updated_at: new Date(),
         },
       });
+      const imageConfig = getImageProviderConfig();
       await snapshotCharacter(characterUpdated, 'ai_generated', {
-        aiModel: { provider: 'mock-image', model: 'mock-model' },
+        aiModel: {
+          provider: imageConfig.provider,
+          model: imageConfig.model,
+        },
       });
       return characterUpdated;
     },
@@ -332,19 +572,24 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         throw new Error('Invalid view id');
       }
       const seed = Date.now() + hashCode(`${charId}-${viewId}`);
-      const regenerated = await generateImageForView(character, viewId, seed);
+      const storageKey = `characters/${projectId}/${charId}/${viewId}-${Date.now()}.png`;
+      const regenerated = await generateImageForView(character, viewId, seed, storageKey);
       const nextRefImages = refImages.filter((img) => img.view !== viewId);
       nextRefImages.push(regenerated);
 
-      const characterUpdated = await db.characters.update({
+      const characterUpdated = await db.character.update({
         where: { id: charId },
         data: {
           ref_images: nextRefImages as unknown as Prisma.InputJsonValue,
           updated_at: new Date(),
         },
       });
+      const retryImageConfig = getImageProviderConfig();
       await snapshotCharacter(characterUpdated, 'ai_regenerated', {
-        aiModel: { provider: 'mock-image', model: 'mock-model' },
+        aiModel: {
+          provider: retryImageConfig.provider,
+          model: retryImageConfig.model,
+        },
       });
       return characterUpdated;
     },
@@ -359,7 +604,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         throw new Error(`Missing views: ${missing.join(', ')}`);
       }
 
-      const confirmed = await db.characters.update({
+      const confirmed = await db.character.update({
         where: { id: charId },
         data: {
           status: 'confirmed',
@@ -380,11 +625,13 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       const expressions = await Promise.all(
         EXPRESSIONS.map((expr, index) => {
           const seed = hashCode(`${charId}-expr-${expr}`) + index;
+          const storageKey = `characters/${projectId}/${charId}/expr-${expr}-${Date.now()}.png`;
           return generateImageForRef(
             character,
             `expr_${expr}`,
             `${expr} expression`,
             seed,
+            storageKey,
             referenceImages
           );
         })
@@ -393,20 +640,25 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
       const scenes = await Promise.all(
         STANDING_SCENES.map((scene, index) => {
           const seed = hashCode(`${charId}-scene-${scene}`) + index;
+          const storageKey = `characters/${projectId}/${charId}/scene-${scene}-${Date.now()}.png`;
           const detail = scene === 'standing_casual' ? 'full body standing casual' : 'full body standing formal';
-          return generateImageForRef(character, `scene_${scene}`, detail, seed, referenceImages);
+          return generateImageForRef(character, `scene_${scene}`, detail, seed, storageKey, referenceImages);
         })
       );
 
-      const characterUpdated = await db.characters.update({
+      const characterUpdated = await db.character.update({
         where: { id: charId },
         data: {
           ref_images: [...refImages, ...expressions, ...scenes] as unknown as Prisma.InputJsonValue,
           updated_at: new Date(),
         },
       });
+      const refsImageConfig = getImageProviderConfig();
       await snapshotCharacter(characterUpdated, 'ai_generated', {
-        aiModel: { provider: 'mock-image', model: 'mock-model' },
+        aiModel: {
+          provider: refsImageConfig.provider,
+          model: refsImageConfig.model,
+        },
       });
       return characterUpdated;
     },
@@ -446,7 +698,7 @@ export function createCharacterService(options: CharacterServiceOptions = {}): C
         updated_at: new Date(),
       };
 
-      const character = await db.characters.update({ where: { id: charId }, data });
+      const character = await db.character.update({ where: { id: charId }, data });
       return character;
     },
   };

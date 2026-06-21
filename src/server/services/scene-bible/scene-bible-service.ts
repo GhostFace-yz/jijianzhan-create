@@ -1,5 +1,7 @@
 import { Prisma, SnapshotSource } from '@prisma/client';
 import { prisma } from '../../lib/db.js';
+import { getImageProviderConfig } from '../../adapters/lib/provider-config.js';
+import { sanitizeImagePrompt } from '../../adapters/lib/image-prompt-sanitizer.js';
 import type { AIModelInfo, SnapshotService } from '../snapshot/types.js';
 import type {
   BaseCandidate,
@@ -10,6 +12,7 @@ import type {
   Location,
   LocationListResult,
   LocationVariants,
+  OutlineLocationInput,
   SceneBibleService,
   SceneBibleServiceOptions,
   SceneVariant,
@@ -21,10 +24,13 @@ import { LOCATION_STATUSES } from './types.js';
 const NEGATIVE_PROMPT =
   'people, humans, characters, blurry, bad quality, distorted';
 
-const AI_MODEL_INFO: AIModelInfo = {
-  provider: 'mock-image',
-  model: 'mock-model',
-};
+function getImageModelInfo(): AIModelInfo {
+  const config = getImageProviderConfig();
+  return {
+    provider: config.provider,
+    model: config.model,
+  };
+}
 
 export function createSceneBibleService(
   options: SceneBibleServiceOptions = {}
@@ -96,14 +102,14 @@ export function createSceneBibleService(
   }
 
   async function ensureProjectExists(projectId: string): Promise<void> {
-    const project = await db.projects.findUnique({ where: { id: projectId } });
+    const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) {
       throw new Error('Project not found');
     }
   }
 
   async function ensureLocation(projectId: string, locId: string): Promise<Location> {
-    const location = await db.locations.findUnique({ where: { id: locId } });
+    const location = await db.location.findUnique({ where: { id: locId } });
     if (!location || location.project_id !== projectId) {
       throw new Error('Location not found');
     }
@@ -155,7 +161,8 @@ export function createSceneBibleService(
         seed,
       };
     }
-    const adapter = adapterPool.getImage('mock-image');
+    const imageConfig = getImageProviderConfig();
+    const adapter = adapterPool.getImage(imageConfig.provider);
     const result = await adapter.generateImage(
       {
         prompt,
@@ -164,12 +171,44 @@ export function createSceneBibleService(
         width: 1024,
         height: 1024,
       },
-      AI_MODEL_INFO
+      imageConfig
     );
     return {
       url: result.data.url,
       seed: result.data.seed,
     };
+  }
+
+  function buildFallbackPrompt(location: Location): string {
+    const parts = [
+      location.space_type,
+      location.style,
+      location.color_tone,
+      location.lighting_type,
+      'no people, no characters, empty room',
+      'architectural photography',
+    ];
+    return sanitizeImagePrompt(parts.filter(Boolean).join(', '));
+  }
+
+  async function generateImageWithFallback(
+    location: Location,
+    prompt: string,
+    seed: number
+  ): Promise<{ url: string; seed: number }> {
+    try {
+      return await generateImage(prompt, seed);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('content_policy_violation')) {
+        const fallbackPrompt = buildFallbackPrompt(location);
+        console.warn(
+          `[SceneBible] Content policy violation for location "${location.name}". Retrying with fallback prompt: ${fallbackPrompt}`
+        );
+        return await generateImage(fallbackPrompt, seed);
+      }
+      throw err;
+    }
   }
 
   function normalizeInput(
@@ -184,19 +223,21 @@ export function createSceneBibleService(
       style: input.style ?? null,
       color_tone: input.color_tone ?? null,
       lighting_type: input.lighting_type ?? null,
-      key_props: [] as unknown as Prisma.InputJsonValue,
+      key_props: (input.key_props ?? []) as unknown as Prisma.InputJsonValue,
       status: input.status ?? 'draft',
     };
   }
 
   return {
     async syncScenesFromOutline(projectId: string): Promise<Location[]> {
-      await ensureProjectExists(projectId);
-      const project = await db.projects.findUnique({ where: { id: projectId } });
-      const meta = (project?.meta ?? {}) as Record<string, unknown>;
-      const rawLocations = meta.locations;
+      const project = await db.project.findUnique({ where: { id: projectId } });
+      if (!project) {
+        throw new Error('Project not found');
+      }
+      const outline = (project.outline ?? {}) as Record<string, unknown>;
+      const rawLocations = outline.locations;
 
-      const outlineLocations: Array<{ name: string; description?: string | null }> = [];
+      const outlineLocations: OutlineLocationInput[] = [];
       if (Array.isArray(rawLocations)) {
         for (const item of rawLocations) {
           if (typeof item === 'string') {
@@ -213,6 +254,29 @@ export function createSceneBibleService(
                 typeof record.description === 'string'
                   ? record.description
                   : null,
+              space_type:
+                typeof record.space_type === 'string'
+                  ? record.space_type
+                  : null,
+              frequency:
+                typeof record.frequency === 'string'
+                  ? record.frequency
+                  : null,
+              style:
+                typeof record.style === 'string' ? record.style : null,
+              color_tone:
+                typeof record.color_tone === 'string'
+                  ? record.color_tone
+                  : null,
+              lighting_type:
+                typeof record.lighting_type === 'string'
+                  ? record.lighting_type
+                  : null,
+              key_props: Array.isArray(record.key_props)
+                ? record.key_props.filter(
+                    (x): x is string => typeof x === 'string'
+                  )
+                : undefined,
             });
           }
         }
@@ -220,25 +284,32 @@ export function createSceneBibleService(
 
       const results: Location[] = [];
       for (const item of outlineLocations) {
-        const existing = await db.locations.findFirst({
+        const existing = await db.location.findFirst({
           where: { project_id: projectId, name: item.name },
         });
 
         let location: Location;
         if (existing) {
-          location = await db.locations.update({
+          location = await db.location.update({
             where: { id: existing.id },
             data: {
               description: item.description ?? existing.description,
+              space_type: item.space_type ?? existing.space_type,
+              frequency: item.frequency ?? existing.frequency,
+              style: item.style ?? existing.style,
+              color_tone: item.color_tone ?? existing.color_tone,
+              lighting_type: item.lighting_type ?? existing.lighting_type,
+              key_props: (item.key_props ??
+                parseKeyProps(existing)) as unknown as Prisma.InputJsonValue,
               updated_at: new Date(),
             },
           });
         } else {
           const data: Prisma.LocationCreateInput = {
-            ...normalizeInput(item),
+            ...normalizeInput(item as CreateLocationInput),
             project_id: projectId,
           };
-          location = await db.locations.create({ data });
+          location = await db.location.create({ data });
         }
 
         await snapshotLocation(location, 'ai_generated');
@@ -252,8 +323,8 @@ export function createSceneBibleService(
       await ensureProjectExists(projectId);
       const where: Prisma.LocationWhereInput = { project_id: projectId };
       const [total, locations] = await Promise.all([
-        db.locations.count({ where }),
-        db.locations.findMany({
+        db.location.count({ where }),
+        db.location.findMany({
           where,
           orderBy: { updated_at: 'desc' },
         }),
@@ -263,7 +334,7 @@ export function createSceneBibleService(
 
     async getScene(projectId: string, locId: string): Promise<Location | null> {
       await ensureProjectExists(projectId);
-      const location = await db.locations.findUnique({ where: { id: locId } });
+      const location = await db.location.findUnique({ where: { id: locId } });
       if (!location || location.project_id !== projectId) {
         return null;
       }
@@ -277,7 +348,7 @@ export function createSceneBibleService(
         project_id: projectId,
         key_props: (input.key_props ?? []) as unknown as Prisma.InputJsonValue,
       };
-      const location = await db.locations.create({ data });
+      const location = await db.location.create({ data });
       await snapshotLocation(location, 'user_edited');
       return location;
     },
@@ -305,7 +376,7 @@ export function createSceneBibleService(
       }
       if (input.status !== undefined) data.status = input.status;
 
-      const location = await db.locations.update({ where: { id: locId }, data });
+      const location = await db.location.update({ where: { id: locId }, data });
       await snapshotLocation(location, 'user_edited');
       return location;
     },
@@ -323,7 +394,7 @@ export function createSceneBibleService(
 
       const candidates = await Promise.all(
         seeds.map(async (seed) => {
-          const result = await generateImage(prompt, seed);
+          const result = await generateImageWithFallback(location, prompt, seed);
           return {
             url: result.url,
             seed: result.seed,
@@ -343,7 +414,7 @@ export function createSceneBibleService(
       await ensureProjectExists(projectId);
       await ensureLocation(projectId, locId);
 
-      const location = await db.locations.update({
+      const location = await db.location.update({
         where: { id: locId },
         data: {
           base_seed: candidate.seed,
@@ -352,7 +423,7 @@ export function createSceneBibleService(
         },
       });
       await snapshotLocation(location, 'ai_generated', {
-        aiModel: AI_MODEL_INFO,
+        aiModel: getImageModelInfo(),
         promptOverride: candidate.prompt,
       });
       return location;
@@ -376,7 +447,7 @@ export function createSceneBibleService(
         input.weather
       );
 
-      const result = await generateImage(prompt, seed);
+      const result = await generateImageWithFallback(location, prompt, seed);
       return {
         url: result.url,
         seed: result.seed,
@@ -403,7 +474,7 @@ export function createSceneBibleService(
         } as SceneVariant,
       };
 
-      const updated = await db.locations.update({
+      const updated = await db.location.update({
         where: { id: locId },
         data: {
           variants: nextVariants as unknown as Prisma.InputJsonValue,
@@ -411,7 +482,7 @@ export function createSceneBibleService(
         },
       });
       await snapshotLocation(updated, 'ai_generated', {
-        aiModel: AI_MODEL_INFO,
+        aiModel: getImageModelInfo(),
         promptOverride: input.variant.prompt,
       });
       return updated;
@@ -486,7 +557,7 @@ export function createSceneBibleService(
         updated_at: new Date(),
       };
 
-      const location = await db.locations.update({ where: { id: locId }, data });
+      const location = await db.location.update({ where: { id: locId }, data });
       return location;
     },
   };

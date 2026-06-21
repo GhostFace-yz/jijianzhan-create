@@ -1,5 +1,6 @@
 import type { SnapshotService } from '../snapshot/types.js';
 import type { AdapterPool } from '../../adapters/pool.js';
+import type { SceneBibleService } from '../scene-bible/types.js';
 
 // ── Outline Data Shapes ────────────────────────────────────────────
 
@@ -12,6 +13,12 @@ export interface OutlineCharacter {
 export interface OutlineLocation {
   name: string;
   description: string;
+  space_type?: string;
+  frequency?: string;
+  style?: string;
+  color_tone?: string;
+  lighting_type?: string;
+  key_props?: string[];
 }
 
 export interface OutlineEpisode {
@@ -78,6 +85,7 @@ export interface OutlineServiceOptions {
   prisma?: typeof import('../../lib/db.js').prisma;
   snapshotService?: SnapshotService;
   adapterPool?: AdapterPool;
+  sceneBibleService?: SceneBibleService;
   /** Max retries when AI returns non-compliant JSON */
   maxRetries?: number;
 }

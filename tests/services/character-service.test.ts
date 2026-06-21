@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { cleanCharacters, cleanProjects, cleanSnapshots, disconnectTestDb, testPrisma } from '../helpers/prisma.js';
 import { AdapterPool } from '../../src/server/adapters/pool.js';
 import { MockImageAdapter } from '../../src/server/adapters/providers/mock/mock-image-adapter.js';
+import { MockTextAdapter } from '../../src/server/adapters/providers/mock/mock-text-adapter.js';
 import { createCharacterService } from '../../src/server/services/character/character-service.js';
 import { createSnapshotService } from '../../src/server/services/snapshot/snapshot-service.js';
 import type { CharacterService } from '../../src/server/services/character/types.js';
@@ -9,6 +10,7 @@ import type { CharacterService } from '../../src/server/services/character/types
 function createTestServices() {
   const adapterPool = new AdapterPool();
   adapterPool.registerImage(new MockImageAdapter());
+  adapterPool.registerText(new MockTextAdapter());
   const snapshotService = createSnapshotService({ prisma: testPrisma });
   const service = createCharacterService({
     prisma: testPrisma,
@@ -19,7 +21,7 @@ function createTestServices() {
 }
 
 async function createTestProject() {
-  return testPrisma.projects.create({
+  return testPrisma.project.create({
     data: {
       user_id: 'system',
       status: 'draft',
@@ -116,6 +118,88 @@ describe('CharacterService', () => {
     expect(characters).toHaveLength(2);
     expect(characters[0].name).toBe('Hero');
     expect(characters[1].role_type).toBe('antagonist');
+  });
+
+  it('syncs characters from outline and computes episode range', async () => {
+    const project = await createTestProject();
+    await testPrisma.project.update({
+      where: { id: project.id },
+      data: {
+        outline: {
+          world_setting: 'Modern city',
+          main_conflict: 'Love triangle',
+          episode_count: 3,
+          characters: [
+            { name: 'Alice', role_type: 'protagonist', description: 'A brave reporter' },
+            { name: 'Bob', role_type: 'supporting', description: 'Her editor' },
+          ],
+          locations: [],
+          episodes: [
+            { episode_number: 1, title: 'E1', summary: 'S1', key_events: ['e1'], featured_characters: ['Alice'], featured_locations: ['Office'] },
+            { episode_number: 2, title: 'E2', summary: 'S2', key_events: ['e2'], featured_characters: ['Alice', 'Bob'], featured_locations: ['Office'] },
+            { episode_number: 3, title: 'E3', summary: 'S3', key_events: ['e3'], featured_characters: ['Bob'], featured_locations: ['Office'] },
+          ],
+        } as never,
+      },
+    });
+
+    const characters = await service.syncCharactersFromOutline(project.id);
+
+    expect(characters).toHaveLength(2);
+    expect(characters[0].name).toBe('Alice');
+    expect(characters[0].role_type).toBe('protagonist');
+    expect(characters[0].episode_range).toBe('1-2');
+    expect(characters[1].name).toBe('Bob');
+    expect(characters[1].episode_range).toBe('2-3');
+  });
+
+  it('does not overwrite existing characters when syncing from outline', async () => {
+    const project = await createTestProject();
+    await testPrisma.project.update({
+      where: { id: project.id },
+      data: {
+        outline: {
+          world_setting: 'Modern city',
+          main_conflict: 'Love triangle',
+          episode_count: 1,
+          characters: [
+            { name: 'Alice', role_type: 'protagonist', description: 'A brave reporter' },
+          ],
+          locations: [],
+          episodes: [
+            { episode_number: 1, title: 'E1', summary: 'S1', key_events: ['e1'], featured_characters: ['Alice'], featured_locations: ['Office'] },
+          ],
+        } as never,
+      },
+    });
+
+    await service.createCharacter(project.id, { name: 'Alice', role_type: 'supporting' });
+    const characters = await service.syncCharactersFromOutline(project.id);
+
+    expect(characters).toHaveLength(0);
+    const list = await service.listCharacters(project.id);
+    expect(list.total).toBe(1);
+    expect(list.characters[0].role_type).toBe('supporting');
+  });
+
+  it('returns empty array when outline has no characters', async () => {
+    const project = await createTestProject();
+    await testPrisma.project.update({
+      where: { id: project.id },
+      data: {
+        outline: {
+          world_setting: 'Modern city',
+          main_conflict: 'Love triangle',
+          episode_count: 0,
+          characters: [],
+          locations: [],
+          episodes: [],
+        } as never,
+      },
+    });
+
+    const characters = await service.syncCharactersFromOutline(project.id);
+    expect(characters).toHaveLength(0);
   });
 
   it('generates three views', async () => {

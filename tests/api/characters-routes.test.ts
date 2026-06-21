@@ -226,6 +226,37 @@ describe('characters API routes', () => {
     expect(res.body.data.appearance).toBe('long black hair');
   });
 
+  it('POST /sync-from-outline creates characters from outline', async () => {
+    const project = await createTestProject();
+    await testPrisma.project.update({
+      where: { id: project.id },
+      data: {
+        outline: {
+          world_setting: 'Modern city',
+          main_conflict: 'Love triangle',
+          episode_count: 2,
+          characters: [
+            { name: 'Alice', role_type: 'protagonist', description: 'A brave reporter' },
+            { name: 'Bob', role_type: 'supporting', description: 'Her editor' },
+          ],
+          locations: [],
+          episodes: [
+            { episode_number: 1, title: 'E1', summary: 'S1', key_events: ['e1'], featured_characters: ['Alice'], featured_locations: ['Office'] },
+            { episode_number: 2, title: 'E2', summary: 'S2', key_events: ['e2'], featured_characters: ['Alice', 'Bob'], featured_locations: ['Office'] },
+          ],
+        } as never,
+      },
+    });
+
+    const res = await request(app).post(`/api/v1/projects/${project.id}/characters/sync-from-outline`);
+
+    expect(res.status).toBe(201);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.data[0].name).toBe('Alice');
+    expect(res.body.data[0].episode_range).toBe('1-2');
+    expect(res.body.data[1].name).toBe('Bob');
+  });
+
   it('returns 400 for invalid role_type', async () => {
     const project = await createTestProject();
     const res = await request(app)

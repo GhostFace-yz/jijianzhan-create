@@ -1,5 +1,10 @@
 import { prisma } from '../../lib/db.js';
+import { getImageProviderConfig } from '../../adapters/lib/provider-config.js';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import type { StoryboardNode } from './types.js';
+import type { StorageService } from '../storage/types.js';
 import type {
   StoryboardImageService,
   StoryboardImageServiceOptions,
@@ -25,6 +30,42 @@ const QUALITY_CONTROL_LAYER =
 
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
+
+// 1x1 transparent PNG placeholder for mock providers that return non-downloadable URLs
+const PLACEHOLDER_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+// ── Local Persistence ──────────────────────────────────────────────
+
+async function persistGeneratedImage(
+  remoteUrl: string,
+  storageKey: string,
+  storage: StorageService | undefined,
+  provider: string,
+): Promise<string> {
+  if (!storage) {
+    return remoteUrl;
+  }
+
+  let buffer: Buffer;
+  if (provider === 'mock-image') {
+    // Mock provider returns a fake URL; persist a placeholder so local URL is valid
+    buffer = Buffer.from(PLACEHOLDER_PNG_BASE64, 'base64');
+  } else {
+    const res = await fetch(remoteUrl);
+    if (!res.ok) {
+      throw new Error(`Failed to download generated image: ${res.status} ${res.statusText}`);
+    }
+    buffer = Buffer.from(await res.arrayBuffer());
+  }
+
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'storyboard-'));
+  const tmpPath = path.join(tmpDir, 'image.png');
+  await writeFile(tmpPath, buffer);
+
+  const saved = await storage.save(tmpPath, storageKey);
+  return saved.url;
+}
 
 // ── Risk Assessment ────────────────────────────────────────────────
 
@@ -71,7 +112,7 @@ async function resolveCharacterIPContext(
 
   for (const nc of node.characters) {
     // Look up character by name in this project
-    const character = await prisma.characters.findFirst({
+    const character = await prisma.character.findFirst({
       where: {
         project_id: projectId,
         name: nc.char_id,
@@ -116,7 +157,7 @@ async function resolveSceneSeedContext(
 
   // Look up location by scene_id mapping via script
   // First, get the project to find the script
-  const project = await prisma.projects.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project || !project.meta) return null;
 
   const meta = project.meta as Record<string, unknown>;
@@ -138,7 +179,7 @@ async function resolveSceneSeedContext(
   if (!locationId) {
     // Try looking up location by name matching scene_variant location
     // Fallback: find any confirmed location
-    const anyLocation = await prisma.locations.findFirst({
+    const anyLocation = await prisma.location.findFirst({
       where: {
         project_id: projectId,
         status: 'confirmed',
@@ -156,12 +197,12 @@ async function resolveSceneSeedContext(
   }
 
   // Try to find location by name first, then by id
-  let location = await prisma.locations.findFirst({
+  let location = await prisma.location.findFirst({
     where: { project_id: projectId, name: locationId },
   });
 
   if (!location) {
-    location = await prisma.locations.findFirst({
+    location = await prisma.location.findFirst({
       where: { project_id: projectId, id: locationId },
     });
   }
@@ -217,7 +258,7 @@ async function assemblePrompt(
   const sceneConditioning = sceneParts.filter(Boolean).join(', ');
 
   // Layer 4: Style unification
-  const project = await prisma.projects.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
   const meta = (project?.meta as Record<string, unknown>) || {};
   const styleTags: string[] = Array.isArray(meta.style_tags) ? meta.style_tags as string[] : [];
   const genre = typeof meta.genre === 'string' ? meta.genre : '';
@@ -300,10 +341,11 @@ export function createStoryboardImageService(
 ): StoryboardImageService {
   const db = options.prisma ?? prisma;
   const adapterPool = options.adapterPool;
+  const storage = options.storage;
   const maxRefinementIterations = options.maxRefinementIterations ?? 3;
 
   async function ensureProject(projectId: string) {
-    const project = await db.projects.findUnique({ where: { id: projectId } });
+    const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) throw new Error('Project not found');
     return project;
   }
@@ -322,7 +364,7 @@ export function createStoryboardImageService(
     const project = await ensureProject(projectId);
     const current = (project.storyboard_nodes as Record<string, unknown>) ?? {};
     const updated = { ...current, [episodeId]: nodes };
-    await db.projects.update({
+    await db.project.update({
       where: { id: projectId },
       data: { storyboard_nodes: updated as any, updated_at: new Date() },
     });
@@ -395,7 +437,8 @@ export function createStoryboardImageService(
     let finalStatus: 'completed' | 'needs_redo' = 'completed';
 
     if (adapterPool) {
-      const adapter = adapterPool.getImage('mock-image');
+      const imageConfig = getImageProviderConfig();
+      const adapter = adapterPool.getImage(imageConfig.provider);
 
       for (let i = 0; i <= maxRefinements; i++) {
         iterations = i;
@@ -414,10 +457,11 @@ export function createStoryboardImageService(
               height: options.height ?? DEFAULT_HEIGHT,
               stylePreset: options.style_preset,
             },
-            { provider: 'mock-image', model: 'mock-model' },
+            imageConfig,
           );
 
-          imageUrl = result.data.url;
+          const storageKey = `storyboards/${projectId}/${episodeId}/${nodeId}-${Date.now()}.png`;
+          imageUrl = await persistGeneratedImage(result.data.url, storageKey, storage, adapter.provider);
           imageSeed = result.data.seed;
           finalStatus = 'completed';
           break;

@@ -13,7 +13,7 @@ function entity(projectId = 'project-1', entityId = 'outline-1'): EntityRef {
 describe('version snapshot system', () => {
   beforeEach(async () => {
     await cleanSnapshots();
-    await testPrisma.version_counters.deleteMany();
+    await testPrisma.versionCounter.deleteMany();
   });
 
   afterAll(async () => {
@@ -186,7 +186,7 @@ describe('version snapshot system', () => {
 
     const rolledBack = await rollbackService.rollback({ entity: ref, versionId: 'v1', editedBy: 'user-1' });
 
-    const flags = await testPrisma.downstream_review_flags.findMany({
+    const flags = await testPrisma.downstreamReviewFlag.findMany({
       where: {
         project_id: ref.projectId,
         source_entity_type: ref.entityType,

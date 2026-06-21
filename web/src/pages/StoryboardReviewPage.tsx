@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams, Link, useNavigate } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -24,6 +24,7 @@ import {
   generateSingleImage,
   reviewNodeImage,
 } from '../api/storyboard';
+import { batchGenerateVideo } from '../api/video';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import {
@@ -432,6 +433,7 @@ export function StoryboardReviewPage() {
   const episodeNumber = parseInt(epNumStr, 10);
   const epId = `ep-${episodeNumber}`;
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // ── Local state ──
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
@@ -509,6 +511,13 @@ export function StoryboardReviewPage() {
     mutationFn: () => batchGenerateImages(projectId, epId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['storyboard-nodes-images', projectId, epId] });
+    },
+  });
+
+  const batchVideoGenerateMutation = useMutation({
+    mutationFn: () => batchGenerateVideo(projectId, epId),
+    onSuccess: () => {
+      navigate(`/projects/${projectId}/episodes/${episodeNumber}/video`);
     },
   });
 
@@ -662,6 +671,10 @@ export function StoryboardReviewPage() {
     batchGenerateMutation.mutate();
   }, [batchGenerateMutation]);
 
+  const handleBatchVideoGenerate = useCallback(() => {
+    batchVideoGenerateMutation.mutate();
+  }, [batchVideoGenerateMutation]);
+
   const modifyNode = modifyNodeId ? nodes.find((n) => n.node_id === modifyNodeId) : null;
   const uploadNode = uploadNodeId ? nodes.find((n) => n.node_id === uploadNodeId) : null;
 
@@ -795,13 +808,12 @@ export function StoryboardReviewPage() {
               {/* Unlock video generation */}
               {allApproved && (
                 <Button
-                  onClick={() => {
-                    // Placeholder: navigate to video generation
-                  }}
+                  onClick={handleBatchVideoGenerate}
+                  disabled={batchVideoGenerateMutation.isPending}
                   className="gap-2 text-sm"
                 >
                   <Play className="h-4 w-4" />
-                  批量生成视频
+                  {batchVideoGenerateMutation.isPending ? '生成中...' : '批量生成视频'}
                 </Button>
               )}
             </div>
@@ -892,6 +904,16 @@ export function StoryboardReviewPage() {
             <div>
               <p className="text-sm font-medium text-semantic-error">批量生成失败</p>
               <p className="text-xs text-slate mt-0.5">{batchGenerateMutation.error.message}</p>
+            </div>
+          </div>
+        )}
+
+        {batchVideoGenerateMutation.isError && (
+          <div className="mx-6 mt-4 rounded-lg border border-semantic-error/20 bg-semantic-error/5 p-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-semantic-error" />
+            <div>
+              <p className="text-sm font-medium text-semantic-error">批量视频生成失败</p>
+              <p className="text-xs text-slate mt-0.5">{batchVideoGenerateMutation.error.message}</p>
             </div>
           </div>
         )}

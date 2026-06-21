@@ -84,6 +84,15 @@ export function createCharacterRouter(service: CharacterService): Router {
     }
   });
 
+  router.post('/sync-from-outline', async (req, res, next) => {
+    try {
+      const characters = await service.syncCharactersFromOutline(routeParams(req).projectId);
+      res.status(201).json({ data: characters });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/:charId', async (req, res, next) => {
     try {
       const character = await service.getCharacter(routeParams(req).projectId, routeParams(req).charId);

@@ -2,18 +2,29 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/db.js';
 import type { OutlineService } from '../services/outline/types.js';
+import type { CharacterService } from '../services/character/types.js';
+
+function routeParams(req: { params: Record<string, string> }): Record<string, string> {
+  return req.params;
+}
 
 // ── Validation Schemas ─────────────────────────────────────────────
 
 const outlineCharacterSchema = z.object({
   name: z.string().min(1, '角色名不能为空'),
-  role_type: z.enum(['protagonist', 'supporting', 'antagonist']).optional(),
+  role_type: z.enum(['protagonist', 'supporting', 'antagonist']),
   description: z.string().min(1, '角色描述不能为空'),
 });
 
 const outlineLocationSchema = z.object({
   name: z.string().min(1, '场景名不能为空'),
   description: z.string().min(1, '场景描述不能为空'),
+  space_type: z.string().optional(),
+  frequency: z.string().optional(),
+  style: z.string().optional(),
+  color_tone: z.string().optional(),
+  lighting_type: z.string().optional(),
+  key_props: z.array(z.string()).optional(),
 });
 
 const outlineEpisodeSchema = z.object({
@@ -36,14 +47,24 @@ const updateOutlineBodySchema = z.object({
 
 // ── Router Factory ─────────────────────────────────────────────────
 
-export function createOutlineRouter(service: OutlineService): Router {
+export function createOutlineRouter(
+  service: OutlineService,
+  characterService: CharacterService,
+): Router {
   const router = Router({ mergeParams: true });
 
   // POST /api/v1/projects/:projectId/outline/generate
   router.post('/generate', async (req, res, next) => {
     try {
-      const { projectId } = req.params;
+      const { projectId } = routeParams(req);
       const outline = await service.generateOutline(projectId);
+      // 生成大纲后自动同步角色到角色圣经
+      try {
+        await characterService.syncCharactersFromOutline(projectId);
+      } catch (syncError) {
+        // 角色同步失败不应阻塞大纲返回，记录后继续
+        console.error('Character sync after outline generation failed:', syncError);
+      }
       res.status(201).json({ data: outline });
     } catch (error) {
       next(error);
@@ -53,12 +74,12 @@ export function createOutlineRouter(service: OutlineService): Router {
   // GET /api/v1/projects/:projectId/outline
   router.get('/', async (req, res, next) => {
     try {
-      const { projectId } = req.params;
+      const { projectId } = routeParams(req);
 
       const outline = await service.getOutline(projectId);
 
       // Fetch project-level fields for the summary response
-      const project = await prisma.projects.findUnique({
+      const project = await prisma.project.findUnique({
         where: { id: projectId },
         select: { outline_locked: true, status: true },
       });
@@ -78,7 +99,7 @@ export function createOutlineRouter(service: OutlineService): Router {
   // PUT /api/v1/projects/:projectId/outline
   router.put('/', async (req, res, next) => {
     try {
-      const { projectId } = req.params;
+      const { projectId } = routeParams(req);
       const body = updateOutlineBodySchema.parse(req.body);
       const outline = await service.updateOutline(projectId, body);
       res.json({ data: outline });
@@ -90,7 +111,7 @@ export function createOutlineRouter(service: OutlineService): Router {
   // POST /api/v1/projects/:projectId/outline/episodes/:episodeNumber/regenerate
   router.post('/episodes/:episodeNumber/regenerate', async (req, res, next) => {
     try {
-      const { projectId, episodeNumber } = req.params;
+      const { projectId, episodeNumber } = routeParams(req);
       const epNum = parseInt(episodeNumber, 10);
 
       if (isNaN(epNum) || epNum < 1) {
@@ -115,7 +136,7 @@ export function createOutlineRouter(service: OutlineService): Router {
   // POST /api/v1/projects/:projectId/outline/validate
   router.post('/validate', async (req, res, next) => {
     try {
-      const { projectId } = req.params;
+      const { projectId } = routeParams(req);
       const report = await service.validateOutline(projectId);
       res.json({ data: report });
     } catch (error) {
@@ -126,7 +147,7 @@ export function createOutlineRouter(service: OutlineService): Router {
   // POST /api/v1/projects/:projectId/outline/confirm
   router.post('/confirm', async (req, res, next) => {
     try {
-      const { projectId } = req.params;
+      const { projectId } = routeParams(req);
       const outline = await service.confirmOutline(projectId);
       res.json({ data: outline });
     } catch (error) {

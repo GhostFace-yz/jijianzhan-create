@@ -80,10 +80,10 @@ async function createProjectWithScript(episodeNumber = 1) {
   };
 
   // Store script in meta for testing
-  const project = await testPrisma.projects.findUnique({ where: { id: projectId } });
+  const project = await testPrisma.project.findUnique({ where: { id: projectId } });
   const meta = (project?.meta as Record<string, unknown>) || {};
   const updatedMeta = { ...meta, [`script_${epId}`]: mockScript };
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: { meta: updatedMeta as any },
   });
@@ -178,7 +178,7 @@ describe('storyboard API routes', () => {
       );
 
       // Verify snapshots were created
-      const snapshots = await testPrisma.version_snapshots.findMany({
+      const snapshots = await testPrisma.versionSnapshot.findMany({
         where: {
           project_id: projectId,
           entity_type: 'node',
@@ -289,7 +289,7 @@ describe('storyboard API routes', () => {
         .send({ nodes: updated });
 
       // Verify a user_edited snapshot was created for the changed node
-      const snapshots = await testPrisma.version_snapshots.findMany({
+      const snapshots = await testPrisma.versionSnapshot.findMany({
         where: {
           project_id: projectId,
           entity_type: 'node',

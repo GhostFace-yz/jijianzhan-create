@@ -30,13 +30,64 @@ sudo systemctl start redis-server
 - `/web` — React + Vite + Tailwind CSS 前端
 - `/docs` — PRD、架构文档、OpenAPI 规范
 
+## 快速开始
+
+```bash
+# 1. 安装依赖
+npm install
+
+# 2. 数据库迁移（首次运行或 schema 变更后）
+npm run db:migrate
+
+# 3. 编译 TypeScript
+npm run build
+```
+
+### 启动后端 API
+
+```bash
+# 开发模式（自动重载）
+npm run dev
+
+# 生产模式
+npm start
+```
+
+API 默认监听 `http://localhost:3000`。
+
+### 启动渲染 Worker（可选）
+
+真实渲染需要 Redis 与 FFmpeg。确保 Redis 已启动后：
+
+```bash
+npm run worker
+```
+
+Worker 会从 Redis 队列消费渲染任务并调用 FFmpeg 执行真实渲染。
+
+### 启动前端
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+前端开发服务器默认监听 `http://localhost:5173`，并通过 Vite 代理将 `/api` 请求转发到 `http://localhost:3000`。
+
 ## 常用命令
 
 ### 后端
 
 ```bash
-# 安装依赖
-npm install
+# 开发模式
+npm run dev
+
+# 生产模式
+npm start
+
+# 启动渲染 Worker
+npm run worker
 
 # 数据库迁移
 npm run db:migrate
@@ -86,14 +137,6 @@ docker compose up -d
 | `MINIO_USE_SSL` | 是否使用 HTTPS | `false` |
 | `MINIO_ACCESS_KEY` | MinIO access key | - |
 | `MINIO_SECRET_KEY` | MinIO secret key | - |
-
-### 本地启动 Worker
-
-```bash
-node dist/server/workers/render-worker.js
-```
-
-Worker 会从 Redis 队列消费渲染任务并调用 FFmpeg 执行真实渲染。
 
 - 后端 API：`/api/v1/projects`
 - 前端页面：`/`（项目列表）、`/projects/new`（新建项目）

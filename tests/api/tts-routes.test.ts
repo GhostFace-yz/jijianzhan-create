@@ -79,10 +79,10 @@ async function createProjectWithStoryboardNodes(episodeNumber = 1) {
   };
 
   // Store script in meta
-  const project = await testPrisma.projects.findUnique({ where: { id: projectId } });
+  const project = await testPrisma.project.findUnique({ where: { id: projectId } });
   const meta = (project?.meta as Record<string, unknown>) || {};
   const updatedMeta = { ...meta, [`script_${epId}`]: mockScript };
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: { meta: updatedMeta as any },
   });
@@ -143,10 +143,10 @@ async function createProjectWithMixedNodes() {
     },
   };
 
-  const project = await testPrisma.projects.findUnique({ where: { id: projectId } });
+  const project = await testPrisma.project.findUnique({ where: { id: projectId } });
   const meta = (project?.meta as Record<string, unknown>) || {};
   const updatedMeta = { ...meta, [`script_${epId}`]: mockScript };
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: { meta: updatedMeta as any },
   });
@@ -408,7 +408,7 @@ describe('TTS API routes', () => {
       );
 
       // Verify snapshots were created with ai_generated source
-      const snapshots = await testPrisma.version_snapshots.findMany({
+      const snapshots = await testPrisma.versionSnapshot.findMany({
         where: {
           project_id: projectId,
           entity_type: 'node',

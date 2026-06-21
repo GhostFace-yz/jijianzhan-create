@@ -21,6 +21,7 @@ import { createLocationRouter } from '../../src/server/routes/locations.js';
 import { createOutlineService } from '../../src/server/services/outline/outline-service.js';
 import { createOutlineRouter } from '../../src/server/routes/outline.js';
 import { createStoryboardService } from '../../src/server/services/storyboard/storyboard-service.js';
+import { createStoryboardImageService } from '../../src/server/services/storyboard/storyboard-image-service.js';
 import { createStoryboardRouter } from '../../src/server/routes/storyboard.js';
 import { createTtsService } from '../../src/server/services/storyboard/tts-service.js';
 import { createTtsRouter } from '../../src/server/routes/tts.js';
@@ -72,10 +73,15 @@ export function createTestApp(prisma: PrismaClient) {
     prisma,
     snapshotService,
     adapterPool,
+    sceneBibleService,
   });
   const storyboardService = createStoryboardService({
     prisma,
     snapshotService,
+    adapterPool,
+  });
+  const storyboardImageService = createStoryboardImageService({
+    prisma,
     adapterPool,
   });
   const ttsService = createTtsService({
@@ -107,10 +113,10 @@ export function createTestApp(prisma: PrismaClient) {
   app.use('/api/v1/projects', createProjectRouter(projectService));
   app.use('/api/v1/projects/:projectId/characters', createCharacterRouter(characterService));
   app.use('/api/v1/projects/:projectId/locations', createLocationRouter(sceneBibleService));
-  app.use('/api/v1/projects/:projectId/outline', createOutlineRouter(outlineService));
+  app.use('/api/v1/projects/:projectId/outline', createOutlineRouter(outlineService, characterService));
   app.use(
     '/api/v1/projects/:projectId/episodes/:epId/storyboard',
-    createStoryboardRouter(storyboardService)
+    createStoryboardRouter(storyboardService, storyboardImageService)
   );
   app.use(
     '/api/v1/projects/:projectId/episodes/:epId/audio/tts',

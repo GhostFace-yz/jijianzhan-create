@@ -22,12 +22,16 @@ function createTestServices() {
   return { service, snapshotService };
 }
 
-async function createTestProject(meta: Record<string, unknown> = {}) {
-  return testPrisma.projects.create({
+async function createTestProject(
+  meta: Record<string, unknown> = {},
+  outline: Record<string, unknown> | null = null
+) {
+  return testPrisma.project.create({
     data: {
       user_id: 'system',
       status: 'draft',
       meta: { title: 'Test Project', ...meta } as never,
+      outline: outline as never,
     },
   });
 }
@@ -49,37 +53,76 @@ describe('SceneBibleService', () => {
   });
 
   it('syncs locations from project outline', async () => {
-    const project = await createTestProject({
-      locations: [
-        { name: 'Cafe', description: 'A cozy coffee shop' },
-        'Park',
-      ],
-    });
+    const project = await createTestProject(
+      {},
+      {
+        locations: [
+          {
+            name: 'Cafe',
+            description: 'A cozy coffee shop',
+            space_type: 'indoor',
+            frequency: 'main',
+            style: 'vintage',
+            color_tone: 'warm brown',
+            lighting_type: 'soft ambient',
+            key_props: ['wooden counter', 'espresso machine'],
+          },
+          'Park',
+        ],
+      }
+    );
 
     const locations = await service.syncScenesFromOutline(project.id);
 
     expect(locations).toHaveLength(2);
     expect(locations[0].name).toBe('Cafe');
     expect(locations[0].description).toBe('A cozy coffee shop');
+    expect(locations[0].space_type).toBe('indoor');
+    expect(locations[0].frequency).toBe('main');
+    expect(locations[0].style).toBe('vintage');
+    expect(locations[0].color_tone).toBe('warm brown');
+    expect(locations[0].lighting_type).toBe('soft ambient');
+    expect(locations[0].key_props).toEqual(['wooden counter', 'espresso machine']);
     expect(locations[1].name).toBe('Park');
   });
 
   it('upserts locations by name on sync', async () => {
-    const project = await createTestProject({
-      locations: [{ name: 'Cafe', description: 'Old description' }],
-    });
+    const project = await createTestProject(
+      {},
+      {
+        locations: [
+          {
+            name: 'Cafe',
+            description: 'Old description',
+            style: 'old',
+            key_props: ['old prop'],
+          },
+        ],
+      }
+    );
     await service.syncScenesFromOutline(project.id);
 
-    await testPrisma.projects.update({
+    await testPrisma.project.update({
       where: { id: project.id },
       data: {
-        meta: { title: 'Test Project', locations: [{ name: 'Cafe', description: 'New description' }] } as never,
+        outline: {
+          locations: [
+            {
+              name: 'Cafe',
+              description: 'New description',
+              style: 'modern',
+              key_props: ['new prop'],
+            },
+          ],
+        } as never,
       },
     });
     const locations = await service.syncScenesFromOutline(project.id);
 
     expect(locations).toHaveLength(1);
     expect(locations[0].description).toBe('New description');
+    expect(locations[0].style).toBe('modern');
+    expect(locations[0].key_props).toEqual(['new prop']);
   });
 
   it('lists scenes for a project', async () => {

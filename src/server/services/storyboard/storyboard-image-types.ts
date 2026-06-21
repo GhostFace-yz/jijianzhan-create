@@ -1,5 +1,6 @@
 import type { StoryboardNode, ShotType, CameraMove } from './types.js';
 import type { AdapterPool } from '../../adapters/pool.js';
+import type { StorageService } from '../storage/types.js';
 
 // ── Image-Specific Node Fields ─────────────────────────────────────
 
@@ -182,6 +183,8 @@ export interface StoryboardImageService {
 export interface StoryboardImageServiceOptions {
   prisma?: typeof import('../../lib/db.js').prisma;
   adapterPool?: AdapterPool;
+  /** Local storage service for persisting generated images */
+  storage?: StorageService;
   /** Max refinement iterations for high-risk nodes (default 3) */
   maxRefinementIterations?: number;
 }

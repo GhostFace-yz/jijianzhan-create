@@ -8,28 +8,60 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model characters {
-  id                String   @id @default(uuid())
+enum CharacterStatus {
+  draft
+  confirmed
+}
+
+enum RoleType {
+  protagonist
+  supporting
+  antagonist
+}
+
+enum ProjectStatus {
+  draft
+  outlining
+  asset_prep
+  producing
+  completed
+}
+
+enum LocationStatus {
+  draft
+  confirmed
+}
+
+enum SnapshotSource {
+  user_edited
+  ai_generated
+  ai_regenerated
+  locked
+}
+
+model Character {
+  id                String          @id @default(uuid())
   project_id        String
   name              String
-  role_type         String
+  role_type         RoleType
   episode_range     String?
   appearance        String?
   costume           String?
   expression        String?
   signature_action  String?
   voice_description String?
-  status            String   @default("draft")
+  status            CharacterStatus @default(draft)
   ref_images        Json
   ip_adapter_id     String?
   lora_path         String?
-  created_at        DateTime @default(now())
-  updated_at        DateTime @default(now())
+  created_at        DateTime        @default(now())
+  updated_at        DateTime        @default(now())
 
   @@index([project_id])
+  @@map("characters")
 }
 
-model downstream_review_flags {
+model DownstreamReviewFlag {
   id                 String   @id @default(uuid())
   project_id         String
   source_entity_type String
@@ -42,10 +74,11 @@ model downstream_review_flags {
 
   @@index([status])
   @@index([project_id, source_entity_type, source_entity_id])
+  @@map("downstream_review_flags")
 }
 
-model locations {
-  id            String   @id @default(uuid())
+model Location {
+  id            String          @id @default(uuid())
   project_id    String
   name          String
   description   String?
@@ -55,7 +88,7 @@ model locations {
   color_tone    String?
   lighting_type String?
   key_props     Json
-  status        String   @default("draft")
+  status        LocationStatus  @default(draft)
   base_seed     Int?
   base_image_url String?
   variants      Json    @default("[]")
@@ -63,27 +96,29 @@ model locations {
   updated_at    DateTime @default(now())
 
   @@index([project_id])
+  @@map("locations")
 }
 
-model projects {
-  id             String   @id @default(uuid())
-  user_id        String   @default("system")
+model Project {
+  id             String        @id @default(uuid())
+  user_id        String        @default("system")
   team_id        String?
-  status         String   @default("draft")
+  status         ProjectStatus @default(draft)
   meta           Json
   outline        Json?
-  outline_locked Boolean  @default(false)
+  outline_locked Boolean       @default(false)
   storyboard_nodes Json?
   music            Json?
   render_output    Json?
-  created_at     DateTime @default(now())
-  updated_at     DateTime @default(now())
+  created_at     DateTime      @default(now())
+  updated_at     DateTime      @default(now())
 
   @@index([status])
   @@index([user_id, updated_at(sort: Desc)])
+  @@map("projects")
 }
 
-model version_counters {
+model VersionCounter {
   project_id  String
   entity_type String
   entity_id   String
@@ -91,26 +126,28 @@ model version_counters {
   updated_at  DateTime @default(now())
 
   @@id([project_id, entity_type, entity_id])
+  @@map("version_counters")
 }
 
-model version_snapshots {
-  id                    String   @id @default(uuid())
+model VersionSnapshot {
+  id                    String         @id @default(uuid())
   project_id            String
   entity_type           String
   entity_id             String
   version_number        Int
   version_id            String
-  source                String
+  source                SnapshotSource
   content               Json
   parent_version_number Int?
   diff                  Json
   edited_by             String?
   ai_model              Json?
   prompt_override       String?
-  created_at            DateTime @default(now())
-  updated_at            DateTime @default(now())
+  created_at            DateTime       @default(now())
+  updated_at            DateTime       @default(now())
 
   @@unique([project_id, entity_type, entity_id, version_number])
   @@index([project_id, entity_type, entity_id, created_at(sort: Desc)])
   @@index([project_id, entity_type, entity_id, version_number(sort: Desc)])
+  @@map("version_snapshots")
 }

@@ -65,7 +65,9 @@ describe('CreateProjectPage', () => {
       expect(screen.getByText('标题不能为空')).toBeInTheDocument();
     });
     expect(screen.getByText('创意描述不能为空')).toBeInTheDocument();
-    expect(screen.getByText('请选择题材')).toBeInTheDocument();
+    expect(
+      screen.getByText('请选择题材', { selector: '[data-slot="field-error"] p' })
+    ).toBeInTheDocument();
   });
 
   it('shows error for title exceeding 50 characters', async () => {
@@ -85,9 +87,14 @@ describe('CreateProjectPage', () => {
 
     await user.type(screen.getByLabelText('项目标题 *'), '新项目');
     await user.type(screen.getByLabelText('创意描述 *'), '新描述');
-    await user.selectOptions(screen.getByLabelText('题材 *'), 'urban_romance');
+
+    await user.click(screen.getByLabelText('题材 *'));
+    await user.click(screen.getByRole('option', { name: '都市情感' }));
+
     await user.type(screen.getByLabelText('目标集数'), '12');
-    await user.selectOptions(screen.getByLabelText('时长目标'), '5min');
+
+    await user.click(screen.getByLabelText('时长目标'));
+    await user.click(screen.getByRole('option', { name: '5 分钟' }));
 
     await user.click(screen.getByRole('button', { name: '创建项目' }));
 

@@ -66,10 +66,10 @@ async function createProjectWithStoryboardNodes(episodeNumber = 1) {
     end_state: { characters: [], unresolved_conflicts: [], key_prop_states: {} },
   };
 
-  const project = await testPrisma.projects.findUnique({ where: { id: projectId } });
+  const project = await testPrisma.project.findUnique({ where: { id: projectId } });
   const meta = (project?.meta as Record<string, unknown>) || {};
   const updatedMeta = { ...meta, [`script_${epId}`]: mockScript };
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: { meta: updatedMeta as any },
   });
@@ -249,7 +249,7 @@ describe('Video API routes', () => {
 
       await request(app).post(`/api/v1/projects/${projectId}/episodes/${epId}/video/generate`);
 
-      const snapshots = await testPrisma.version_snapshots.findMany({
+      const snapshots = await testPrisma.versionSnapshot.findMany({
         where: {
           project_id: projectId,
           entity_type: 'node',
@@ -458,7 +458,7 @@ describe('Video API routes', () => {
         .put(`/api/v1/projects/${projectId}/episodes/${epId}/video/nodes/${nodeId}/upload`)
         .send({ url: 'https://mock-cdn.example.com/uploaded/video.mp4', duration });
 
-      const snapshots = await testPrisma.version_snapshots.findMany({
+      const snapshots = await testPrisma.versionSnapshot.findMany({
         where: {
           project_id: projectId,
           entity_type: 'node',

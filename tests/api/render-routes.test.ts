@@ -203,7 +203,7 @@ async function createProjectWithRenderedAssets(): Promise<string> {
   };
   const musicData: ProjectMusic = { [episodeId]: episodeMusic };
 
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: {
       storyboard_nodes: storyboardData as unknown as Prisma.InputJsonValue,
@@ -303,7 +303,7 @@ describe('render API routes', () => {
     };
     const musicData: ProjectMusic = { [episodeId]: episodeMusic };
 
-    await testPrisma.projects.update({
+    await testPrisma.project.update({
       where: { id: projectId },
       data: {
         storyboard_nodes: storyboardData as unknown as Prisma.InputJsonValue,
@@ -326,7 +326,7 @@ describe('render API routes', () => {
     const nodes = createMockNodes();
     const storyboardData: EpisodesStoryboard = { [episodeId]: nodes };
 
-    await testPrisma.projects.update({
+    await testPrisma.project.update({
       where: { id: projectId },
       data: { storyboard_nodes: storyboardData as unknown as Prisma.InputJsonValue },
     });
@@ -443,7 +443,7 @@ describe('render API routes', () => {
       .post(`/api/v1/projects/${projectId}/episodes/${episodeId}/render`)
       .send({});
 
-    const snapshots = await testPrisma.version_snapshots.findMany({
+    const snapshots = await testPrisma.versionSnapshot.findMany({
       where: {
         project_id: projectId,
         entity_type: 'generation_result',

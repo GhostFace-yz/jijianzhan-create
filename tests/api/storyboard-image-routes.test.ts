@@ -34,8 +34,17 @@ async function createProjectAndOutline() {
 async function createConfirmedCharacters(projectId: string) {
   const created: Array<{ id: string; name: string }> = [];
 
+  // Remove any auto-synced outline characters that share the test fixture names
+  // so the confirmed fixtures below are the only ones matched by name.
+  await testPrisma.character.deleteMany({
+    where: {
+      project_id: projectId,
+      name: { in: ['主角', '重要配角'] },
+    },
+  });
+
   // Create character 1: 主角 (matches script characters_present)
-  const char1 = await testPrisma.characters.create({
+  const char1 = await testPrisma.character.create({
     data: {
       project_id: projectId,
       name: '主角',
@@ -54,7 +63,7 @@ async function createConfirmedCharacters(projectId: string) {
   created.push({ id: char1.id, name: char1.name });
 
   // Create character 2: 重要配角 (matches script characters_present)
-  const char2 = await testPrisma.characters.create({
+  const char2 = await testPrisma.character.create({
     data: {
       project_id: projectId,
       name: '重要配角',
@@ -79,7 +88,7 @@ async function createConfirmedCharacters(projectId: string) {
  * Helper: create a location with confirmed base (seed locked) via direct Prisma.
  */
 async function createConfirmedLocation(projectId: string, name: string, baseSeed: number = 42) {
-  const loc = await testPrisma.locations.create({
+  const loc = await testPrisma.location.create({
     data: {
       project_id: projectId,
       name,
@@ -101,7 +110,7 @@ async function createConfirmedLocation(projectId: string, name: string, baseSeed
  * Helper: create a second location with confirmed base via direct Prisma.
  */
 async function createSecondLocation(projectId: string, name: string) {
-  const loc = await testPrisma.locations.create({
+  const loc = await testPrisma.location.create({
     data: {
       project_id: projectId,
       name,
@@ -174,10 +183,10 @@ async function setupFullEnvironment() {
     },
   };
 
-  const project = await testPrisma.projects.findUnique({ where: { id: projectId } });
+  const project = await testPrisma.project.findUnique({ where: { id: projectId } });
   const meta = (project?.meta as Record<string, unknown>) || {};
   const updatedMeta = { ...meta, [`script_${epId}`]: mockScript };
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: { meta: updatedMeta as any },
   });
@@ -513,7 +522,7 @@ describe('storyboard image generation API routes', () => {
       const epId = 'ep-1';
 
       // Create a character WITHOUT ip_adapter_id (not confirmed)
-      await testPrisma.characters.create({
+      await testPrisma.character.create({
         data: {
           project_id: projectId,
           name: '未确认角色',
@@ -546,9 +555,9 @@ describe('storyboard image generation API routes', () => {
         end_state: { characters: [], unresolved_conflicts: [], key_prop_states: {} },
       };
 
-      const project = await testPrisma.projects.findUnique({ where: { id: projectId } });
+      const project = await testPrisma.project.findUnique({ where: { id: projectId } });
       const meta = (project?.meta as Record<string, unknown>) || {};
-      await testPrisma.projects.update({
+      await testPrisma.project.update({
         where: { id: projectId },
         data: { meta: { ...meta, [`script_${epId}`]: mockScript } as any },
       });

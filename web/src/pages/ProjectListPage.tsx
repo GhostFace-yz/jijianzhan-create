@@ -130,12 +130,13 @@ export function ProjectListPage() {
               {projects.map((project) => (
                 <div
                   key={project.id}
-                  className="group rounded-xl border border-hairline bg-canvas p-5 shadow-sm transition-shadow hover:shadow-md"
+                  className="group relative rounded-xl border border-hairline bg-canvas p-5 shadow-sm transition-shadow hover:shadow-md"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <Link
-                      to={`/projects/${project.id}/locations`}
-                      className="line-clamp-1 text-lg font-semibold text-ink hover:text-primary"
+                      to={`/projects/${project.id}`}
+                      className="relative line-clamp-1 text-lg font-semibold text-ink hover:text-primary after:absolute after:inset-0"
+                      aria-label={`查看项目 ${project.meta.title}`}
                     >
                       {project.meta.title}
                     </Link>
@@ -158,7 +159,7 @@ export function ProjectListPage() {
                     ) : null}
                   </div>
 
-                  <div className="mt-4 flex items-center gap-3 border-t border-hairline-soft pt-3">
+                  <div className="relative z-10 mt-4 flex items-center gap-3 border-t border-hairline-soft pt-3">
                     <Link
                       to={`/projects/${project.id}/locations`}
                       className="inline-flex items-center gap-1 text-xs font-medium text-steel hover:text-primary"

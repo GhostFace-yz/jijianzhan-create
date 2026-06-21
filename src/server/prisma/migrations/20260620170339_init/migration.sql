@@ -15,7 +15,7 @@ CREATE TABLE "characters" (
     "ip_adapter_id" TEXT,
     "lora_path" TEXT,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" DATETIME NOT NULL
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateTable
@@ -28,7 +28,7 @@ CREATE TABLE "downstream_review_flags" (
     "new_version_id" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending_review',
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" DATETIME NOT NULL
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateTable
@@ -46,9 +46,9 @@ CREATE TABLE "locations" (
     "status" TEXT NOT NULL DEFAULT 'draft',
     "base_seed" INTEGER,
     "base_image_url" TEXT,
-    "variants" JSONB NOT NULL,
+    "variants" JSONB NOT NULL DEFAULT [],
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" DATETIME NOT NULL
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateTable
@@ -60,8 +60,11 @@ CREATE TABLE "projects" (
     "meta" JSONB NOT NULL,
     "outline" JSONB,
     "outline_locked" BOOLEAN NOT NULL DEFAULT false,
+    "storyboard_nodes" JSONB,
+    "music" JSONB,
+    "render_output" JSONB,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" DATETIME NOT NULL
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateTable
@@ -70,7 +73,7 @@ CREATE TABLE "version_counters" (
     "entity_type" TEXT NOT NULL,
     "entity_id" TEXT NOT NULL,
     "counter" INTEGER NOT NULL DEFAULT 0,
-    "updated_at" DATETIME NOT NULL,
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY ("project_id", "entity_type", "entity_id")
 );
@@ -90,7 +93,8 @@ CREATE TABLE "version_snapshots" (
     "edited_by" TEXT,
     "ai_model" JSONB,
     "prompt_override" TEXT,
-    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateIndex

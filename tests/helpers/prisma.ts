@@ -12,32 +12,32 @@ export const testPrisma = new PrismaClient({
  * 清空测试数据库中的角色表
  */
 export async function cleanCharacters(): Promise<void> {
-  await testPrisma.characters.deleteMany();
+  await testPrisma.character.deleteMany();
 }
 
 /**
  * 清空测试数据库中的场景卡片表
  */
 export async function cleanLocations(): Promise<void> {
-  await testPrisma.locations.deleteMany();
+  await testPrisma.location.deleteMany();
 }
 
 /**
  * 清空测试数据库中的项目表
  */
 export async function cleanProjects(): Promise<void> {
-  await testPrisma.locations.deleteMany();
-  await testPrisma.characters.deleteMany();
-  await testPrisma.projects.deleteMany();
+  await testPrisma.location.deleteMany();
+  await testPrisma.character.deleteMany();
+  await testPrisma.project.deleteMany();
 }
 
 /**
  * 清空测试数据库中的快照与计数器表
  */
 export async function cleanSnapshots(): Promise<void> {
-  await testPrisma.downstream_review_flags.deleteMany();
-  await testPrisma.version_snapshots.deleteMany();
-  await testPrisma.version_counters.deleteMany();
+  await testPrisma.downstreamReviewFlag.deleteMany();
+  await testPrisma.versionSnapshot.deleteMany();
+  await testPrisma.versionCounter.deleteMany();
 }
 
 /**

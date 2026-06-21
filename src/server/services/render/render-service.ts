@@ -317,13 +317,13 @@ async function persistRenderOutput(
   projectId: string,
   output: EpisodeRenderOutput,
 ): Promise<void> {
-  const project = await db.projects.findUnique({ where: { id: projectId } });
+  const project = await db.project.findUnique({ where: { id: projectId } });
   if (!project) throw new Error('Project not found');
 
   const current = getRenderData(project) ?? {};
   const updated: ProjectRenderOutput = { ...current, [output.episode_id]: output };
 
-  await db.projects.update({
+  await db.project.update({
     where: { id: projectId },
     data: {
       render_output: updated as unknown as Prisma.InputJsonValue,
@@ -344,7 +344,7 @@ export function createRenderService(options: RenderServiceOptions): RenderServic
   const queue = options.queue;
 
   async function ensureProject(projectId: string) {
-    const project = await db.projects.findUnique({ where: { id: projectId } });
+    const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) throw new Error('Project not found');
     return project;
   }
@@ -507,8 +507,10 @@ export function createRenderService(options: RenderServiceOptions): RenderServic
           options,
           plan,
         });
-        output = { ...output, job_id: job.id };
-        await persistRenderOutput(db, projectId, output);
+        if (job.id) {
+          output = { ...output, job_id: job.id };
+          await persistRenderOutput(db, projectId, output);
+        }
         return output;
       }
 

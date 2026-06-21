@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/db.js';
+import { getTextProviderConfig } from '../../adapters/lib/provider-config.js';
 import type { AIModelInfo, SnapshotService } from '../snapshot/types.js';
+import type { SceneBibleService } from '../scene-bible/types.js';
 import type {
   OutlineData,
   OutlineEpisode,
@@ -24,6 +26,12 @@ const outlineCharacterSchema = z.object({
 const outlineLocationSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
+  space_type: z.string().optional(),
+  frequency: z.string().optional(),
+  style: z.string().optional(),
+  color_tone: z.string().optional(),
+  lighting_type: z.string().optional(),
+  key_props: z.array(z.string()).optional(),
 });
 
 const outlineEpisodeSchema = z.object({
@@ -67,7 +75,13 @@ The JSON must have this exact structure:
   "locations": [
     {
       "name": "Location name",
-      "description": "Description of the location, its significance, and atmosphere"
+      "description": "Description of the location, its significance, and atmosphere",
+      "space_type": "e.g. indoor / outdoor / public / private",
+      "frequency": "e.g. main / recurring / one-time",
+      "style": "Overall visual style of the location",
+      "color_tone": "Dominant color palette",
+      "lighting_type": "e.g. natural daylight / neon night / warm indoor",
+      "key_props": ["prop 1", "prop 2"]
     }
   ],
   "episode_count": <number of episodes>,
@@ -88,6 +102,7 @@ CRITICAL RULES:
 - episode_number MUST be sequential starting from 1
 - Each episode MUST have at least 2 key_events
 - Each episode MUST have at least 1 featured_character and 1 featured_location
+- Each location SHOULD include space_type, frequency, style, color_tone, lighting_type, and key_props
 - Be creative and detailed — every description should be at least 2-3 sentences
 - Write in Chinese if the project title/description is in Chinese`;
 }
@@ -242,35 +257,25 @@ function validateOutlineInternal(outline: OutlineData): OutlineValidationReport 
   const passes: CheckItem[] = [];
 
   // Check 1: Character location contradiction
-  // For each episode, if a character appears in >1 location, verify key_events
-  // justify the movement
+  // For each episode with 3+ featured locations, warn if no scene transition is
+  // described in either the summary or key events.
+  const TRANSITION_KEYWORDS = [
+    '前往', '离开', '来到', '转移', '赶到', '出发', '移动', '回到',
+    '去', '到', '回', '进出', '路过', '抵达', '返', '走', '来',
+  ];
   for (const episode of outline.episodes) {
-    for (const charName of episode.featured_characters) {
-      const charLocations = episode.featured_locations.filter(() =>
-        episode.featured_characters.includes(charName)
+    if (episode.featured_locations.length >= 3) {
+      const episodeText = [episode.summary, ...episode.key_events].join(' ');
+      const hasSceneTransition = TRANSITION_KEYWORDS.some((kw) =>
+        episodeText.includes(kw)
       );
-      if (episode.featured_locations.length > 1) {
-        // Multiple locations in one episode — check if key_events explain transitions
-        const hasSceneTransition = episode.key_events.some(
-          (e) =>
-            e.includes('前往') ||
-            e.includes('离开') ||
-            e.includes('来到') ||
-            e.includes('转移') ||
-            e.includes('赶到') ||
-            e.includes('出发') ||
-            e.includes('移动') ||
-            e.includes('离开') ||
-            e.includes('回到')
-        );
-        if (!hasSceneTransition && episode.featured_locations.length >= 3) {
-          errors.push({
-            severity: 'error',
-            type: '角色位置矛盾',
-            message: `第${episode.episode_number}集「${episode.title}」：多处场景切换但关键事件中未说明角色移动`,
-            details: `角色：${episode.featured_characters.join('、')}；场景：${episode.featured_locations.join('、')}`,
-          });
-        }
+      if (!hasSceneTransition) {
+        warnings.push({
+          severity: 'warning',
+          type: '角色位置矛盾',
+          message: `第${episode.episode_number}集「${episode.title}」：多处场景切换但关键事件中未说明角色移动`,
+          details: `角色：${episode.featured_characters.join('、')}；场景：${episode.featured_locations.join('、')}`,
+        });
       }
     }
   }
@@ -379,10 +384,11 @@ export function createOutlineService(options: OutlineServiceOptions = {}): Outli
   const db = options.prisma ?? prisma;
   const snapshotService = options.snapshotService;
   const adapterPool = options.adapterPool;
+  const sceneBibleService = options.sceneBibleService;
   const maxRetries = options.maxRetries ?? 3;
 
   async function ensureProject(projectId: string) {
-    const project = await db.projects.findUnique({ where: { id: projectId } });
+    const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) throw new Error('Project not found');
     return project;
   }
@@ -426,7 +432,8 @@ export function createOutlineService(options: OutlineServiceOptions = {}): Outli
 
     const systemPrompt = buildSystemPrompt();
     const userPrompt = buildUserPrompt(meta);
-    const adapter = adapterPool.getText('mock-text');
+    const textConfig = getTextProviderConfig();
+    const adapter = adapterPool.getText(textConfig.provider);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -435,10 +442,7 @@ export function createOutlineService(options: OutlineServiceOptions = {}): Outli
             ? userPrompt
             : `${userPrompt}\n\n[SYSTEM REMINDER] Your previous response was not valid JSON matching the required schema. You MUST output ONLY valid JSON — no markdown, no explanations, no extra text. Return pure JSON only.`;
 
-        const result = await adapter.generateText(prompt, systemPrompt, undefined, {
-          provider: 'mock-text',
-          model: 'mock-model',
-        });
+        const result = await adapter.generateText(prompt, systemPrompt, undefined, textConfig);
 
         const outline = parseAIResponse(result.data.content);
         if (outline) {
@@ -463,9 +467,12 @@ export function createOutlineService(options: OutlineServiceOptions = {}): Outli
     meta: Record<string, unknown>,
     episodeNumber: number,
     existingOutline: OutlineData
-  ): Promise<OutlineEpisode> {
+  ): Promise<{ episode: OutlineEpisode; modelInfo: AIModelInfo }> {
     if (!adapterPool) {
-      return createFallbackEpisode(episodeNumber, meta);
+      return {
+        episode: createFallbackEpisode(episodeNumber, meta),
+        modelInfo: { provider: 'fallback', model: 'template' },
+      };
     }
 
     const systemPrompt = `You are a professional screenwriter. Generate ONE episode of a short drama series as JSON.
@@ -490,14 +497,17 @@ Context: The episode must fit into the existing story world. Use existing charac
       `\nGenerate episode ${episodeNumber}.`,
     ].join('\n');
 
-    const adapter = adapterPool.getText('mock-text');
+    const textConfig = getTextProviderConfig();
+    const adapter = adapterPool.getText(textConfig.provider);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const result = await adapter.generateText(userPrompt, systemPrompt, undefined, {
-          provider: 'mock-text',
-          model: 'mock-model',
-        });
+        const prompt =
+          attempt === 0
+            ? userPrompt
+            : `${userPrompt}\n\n[SYSTEM REMINDER] Your previous response was not valid JSON matching the required schema. You MUST output ONLY valid JSON — no markdown, no explanations, no extra text. Return pure JSON only.`;
+
+        const result = await adapter.generateText(prompt, systemPrompt, undefined, textConfig);
 
         try {
           const parsed = JSON.parse(result.data.content);
@@ -506,7 +516,10 @@ Context: The episode must fit into the existing story world. Use existing charac
             typeof parsed.title === 'string' &&
             Array.isArray(parsed.key_events)
           ) {
-            return parsed as OutlineEpisode;
+            return {
+              episode: parsed as OutlineEpisode,
+              modelInfo: { provider: result.provider, model: result.model },
+            };
           }
         } catch {
           // Parse failed — retry
@@ -516,7 +529,10 @@ Context: The episode must fit into the existing story world. Use existing charac
       }
     }
 
-    return createFallbackEpisode(episodeNumber, meta);
+    return {
+      episode: createFallbackEpisode(episodeNumber, meta),
+      modelInfo: { provider: 'fallback', model: 'template' },
+    };
   }
 
   function createFallbackEpisode(episodeNumber: number, meta: Record<string, unknown>): OutlineEpisode {
@@ -540,7 +556,7 @@ Context: The episode must fit into the existing story world. Use existing charac
 
       const { outline, modelInfo } = await generateWithRetry(meta);
 
-      await db.projects.update({
+      await db.project.update({
         where: { id: projectId },
         data: {
           outline: outline as unknown as Prisma.InputJsonValue,
@@ -582,7 +598,7 @@ Context: The episode must fit into the existing story world. Use existing charac
         throw new Error(`Invalid outline data: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
       }
 
-      await db.projects.update({
+      await db.project.update({
         where: { id: projectId },
         data: {
           outline: parsed.data as unknown as Prisma.InputJsonValue,
@@ -609,7 +625,7 @@ Context: The episode must fit into the existing story world. Use existing charac
       }
 
       const meta = project.meta as Record<string, unknown>;
-      const newEpisode = await generateEpisodeWithAI(meta, episodeNumber, existing);
+      const { episode: newEpisode, modelInfo } = await generateEpisodeWithAI(meta, episodeNumber, existing);
 
       const updatedEpisodes = [...existing.episodes];
       updatedEpisodes[idx] = newEpisode;
@@ -619,7 +635,7 @@ Context: The episode must fit into the existing story world. Use existing charac
         episodes: updatedEpisodes,
       };
 
-      await db.projects.update({
+      await db.project.update({
         where: { id: projectId },
         data: {
           outline: updated as unknown as Prisma.InputJsonValue,
@@ -628,7 +644,7 @@ Context: The episode must fit into the existing story world. Use existing charac
       });
 
       await snapshotOutline(projectId, updated, 'ai_regenerated', {
-        aiModel: { provider: 'mock-text', model: 'mock-model' },
+        aiModel: modelInfo,
       });
 
       return updated;
@@ -660,7 +676,13 @@ Context: The episode must fit into the existing story world. Use existing charac
         throw new Error(`Cannot confirm outline with unresolved errors: ${errorMessages}`);
       }
 
-      await db.projects.update({
+      // Sync locations from the locked outline into the scene bible before
+      // marking the project as ready for asset prep.
+      if (sceneBibleService) {
+        await sceneBibleService.syncScenesFromOutline(projectId);
+      }
+
+      await db.project.update({
         where: { id: projectId },
         data: {
           outline_locked: true,

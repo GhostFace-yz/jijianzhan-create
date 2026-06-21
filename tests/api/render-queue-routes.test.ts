@@ -184,7 +184,7 @@ async function createProjectWithRenderedAssets(): Promise<string> {
   };
   const musicData: ProjectMusic = { [episodeId]: episodeMusic };
 
-  await testPrisma.projects.update({
+  await testPrisma.project.update({
     where: { id: projectId },
     data: {
       storyboard_nodes: storyboardData as unknown as Prisma.InputJsonValue,

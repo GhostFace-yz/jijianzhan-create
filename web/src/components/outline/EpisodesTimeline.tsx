@@ -151,13 +151,11 @@ export function EpisodesTimeline({
                     <Button
                       variant="secondary"
                       className="w-full gap-2"
-                      disabled={regenerating === ep.episode_number}
+                      loading={regenerating === ep.episode_number}
                       onClick={() => onRegenerateEpisode(ep.episode_number)}
                     >
-                      <RefreshCw
-                        className={`h-4 w-4 ${regenerating === ep.episode_number ? 'animate-spin' : ''}`}
-                      />
-                      {regenerating === ep.episode_number ? '重新生成中...' : '重新生成此集'}
+                      <RefreshCw className="h-4 w-4" />
+                      重新生成此集
                     </Button>
                   )}
                 </div>

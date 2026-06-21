@@ -62,7 +62,7 @@ export function createMusicService(options: MusicServiceOptions): MusicService {
   const maxRetries = options.maxRetries ?? 2;
 
   async function ensureProject(projectId: string) {
-    const project = await db.projects.findUnique({ where: { id: projectId } });
+    const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) throw new Error('Project not found');
     return project;
   }
@@ -270,7 +270,7 @@ export function createMusicService(options: MusicServiceOptions): MusicService {
         [episodeId]: episodeMusic,
       };
 
-      await db.projects.update({
+      await db.project.update({
         where: { id: projectId },
         data: {
           music: updatedMusic as unknown as Prisma.InputJsonValue,
@@ -320,7 +320,7 @@ export function createMusicService(options: MusicServiceOptions): MusicService {
         [episodeId]: episodeMusic,
       };
 
-      await db.projects.update({
+      await db.project.update({
         where: { id: projectId },
         data: {
           music: updatedMusic as unknown as Prisma.InputJsonValue,

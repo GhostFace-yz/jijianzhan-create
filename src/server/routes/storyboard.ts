@@ -3,6 +3,10 @@ import { z } from 'zod';
 import type { StoryboardService } from '../services/storyboard/types.js';
 import type { StoryboardImageService } from '../services/storyboard/storyboard-image-types.js';
 
+function routeParams(req: { params: Record<string, string> }): Record<string, string> {
+  return req.params;
+}
+
 // ── Validation Schemas ─────────────────────────────────────────────
 
 const epIdParamSchema = z.string().regex(/^ep-\d+$/, 'Invalid episode ID format. Expected: ep-{number}');
@@ -38,7 +42,7 @@ export function createStoryboardRouter(
   // POST /api/v1/projects/:projectId/episodes/:epId/storyboard/split
   router.post('/split', async (req, res, next) => {
     try {
-      const { projectId, epId } = req.params;
+      const { projectId, epId } = routeParams(req);
 
       // Validate episode ID
       const epIdParsed = epIdParamSchema.safeParse(epId);
@@ -76,7 +80,7 @@ export function createStoryboardRouter(
   // GET /api/v1/projects/:projectId/episodes/:epId/storyboard/nodes
   router.get('/nodes', async (req, res, next) => {
     try {
-      const { projectId, epId } = req.params;
+      const { projectId, epId } = routeParams(req);
 
       const epIdParsed = epIdParamSchema.safeParse(epId);
       if (!epIdParsed.success) {
@@ -102,7 +106,7 @@ export function createStoryboardRouter(
   // PUT /api/v1/projects/:projectId/episodes/:epId/storyboard/nodes
   router.put('/nodes', async (req, res, next) => {
     try {
-      const { projectId, epId } = req.params;
+      const { projectId, epId } = routeParams(req);
 
       const epIdParsed = epIdParamSchema.safeParse(epId);
       if (!epIdParsed.success) {
@@ -153,7 +157,7 @@ export function createStoryboardRouter(
   // POST /api/v1/projects/:projectId/episodes/:epId/storyboard/nodes/:nodeId/split
   router.post('/nodes/:nodeId/split', async (req, res, next) => {
     try {
-      const { projectId, epId, nodeId } = req.params;
+      const { projectId, epId, nodeId } = routeParams(req);
 
       const epIdParsed = epIdParamSchema.safeParse(epId);
       if (!epIdParsed.success) {
@@ -199,7 +203,7 @@ export function createStoryboardRouter(
     // POST /nodes/generate — batch generate images for all nodes
     router.post('/nodes/generate', async (req, res, next) => {
       try {
-        const { projectId, epId } = req.params;
+        const { projectId, epId } = routeParams(req);
 
         const epIdParsed = epIdParamSchema.safeParse(epId);
         if (!epIdParsed.success) {
@@ -247,7 +251,7 @@ export function createStoryboardRouter(
     // POST /nodes/:nodeId/generate — generate image for a single node
     router.post('/nodes/:nodeId/generate', async (req, res, next) => {
       try {
-        const { projectId, epId, nodeId } = req.params;
+        const { projectId, epId, nodeId } = routeParams(req);
 
         const epIdParsed = epIdParamSchema.safeParse(epId);
         if (!epIdParsed.success) {
@@ -293,7 +297,7 @@ export function createStoryboardRouter(
     // PUT /nodes/:nodeId/review — review a generated node image
     router.put('/nodes/:nodeId/review', async (req, res, next) => {
       try {
-        const { projectId, epId, nodeId } = req.params;
+        const { projectId, epId, nodeId } = routeParams(req);
 
         const epIdParsed = epIdParamSchema.safeParse(epId);
         if (!epIdParsed.success) {

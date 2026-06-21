@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { getCharacter } from '../../api/characters';
 import { getProject } from '../../api/projects';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
+import { Skeleton } from '../../components/shadcn/skeleton';
 import { CharacterForm } from '../../components/characters/CharacterForm';
 import { ThreeViewGenerator } from '../../components/characters/ThreeViewGenerator';
 import { ReferenceGallery } from '../../components/characters/ReferenceGallery';
@@ -52,8 +53,34 @@ export function CharacterDetailPage() {
 
   if (isLoading || !character) {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface-soft">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      <div className="min-h-screen bg-surface-soft">
+        <header className="sticky top-0 z-10 border-b border-hairline bg-canvas/95 backdrop-blur">
+          <div className="mx-auto max-w-5xl px-6 py-4">
+            <Skeleton className="h-4 w-24" />
+            <div className="mt-4 flex items-center gap-4">
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-7 w-48" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            </div>
+          </div>
+        </header>
+        <main className="mx-auto max-w-5xl space-y-8 px-6 py-8" data-testid="character-skeleton">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-hairline bg-canvas p-6 shadow-sm md:p-8 space-y-4"
+            >
+              <Skeleton className="h-6 w-1/4" />
+              <Skeleton className="h-24 w-full" />
+              <div className="grid grid-cols-2 gap-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+          ))}
+        </main>
       </div>
     );
   }
